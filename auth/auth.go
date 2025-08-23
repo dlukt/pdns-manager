@@ -6,7 +6,7 @@ import (
 
 	"github.com/dlukt/pdns-manager/ent"
 	"github.com/dlukt/pdns-manager/ent/user"
-	"github.com/google/uuid"
+	"github.com/rs/xid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -34,7 +34,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*ent.User, st
 	if err != nil {
 		return nil, "", err
 	}
-	token := uuid.New().String()
+	token := xid.New().String()
 	u, err := s.client.User.Create().
 		SetFirstName(in.FirstName).
 		SetLastName(in.LastName).
@@ -76,7 +76,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (*ent.User,
 }
 
 // UpdateProfile updates the user's profile information.
-func (s *Service) UpdateProfile(ctx context.Context, id int, firstName, lastName string) (*ent.User, error) {
+func (s *Service) UpdateProfile(ctx context.Context, id string, firstName, lastName string) (*ent.User, error) {
 	return s.client.User.UpdateOneID(id).
 		SetFirstName(firstName).
 		SetLastName(lastName).
@@ -84,7 +84,7 @@ func (s *Service) UpdateProfile(ctx context.Context, id int, firstName, lastName
 }
 
 // ChangePassword changes a user's password after verifying the old one.
-func (s *Service) ChangePassword(ctx context.Context, id int, oldPassword, newPassword string) error {
+func (s *Service) ChangePassword(ctx context.Context, id string, oldPassword, newPassword string) error {
 	u, err := s.client.User.Get(ctx, id)
 	if err != nil {
 		return err
@@ -100,8 +100,8 @@ func (s *Service) ChangePassword(ctx context.Context, id int, oldPassword, newPa
 }
 
 // ChangeEmail updates the user's email and returns a new verification token.
-func (s *Service) ChangeEmail(ctx context.Context, id int, newEmail string) (string, error) {
-	token := uuid.New().String()
+func (s *Service) ChangeEmail(ctx context.Context, id string, newEmail string) (string, error) {
+	token := xid.New().String()
 	err := s.client.User.UpdateOneID(id).
 		SetEmail(newEmail).
 		SetEmailVerified(false).
@@ -114,7 +114,7 @@ func (s *Service) ChangeEmail(ctx context.Context, id int, newEmail string) (str
 }
 
 // DeleteAccount removes the user from the database.
-func (s *Service) DeleteAccount(ctx context.Context, id int) error {
+func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 	return s.client.User.DeleteOneID(id).Exec(ctx)
 }
 
@@ -124,7 +124,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string) (strin
 	if err != nil {
 		return "", err
 	}
-	token := uuid.New().String()
+	token := xid.New().String()
 	err = s.client.User.UpdateOne(u).SetResetToken(token).Exec(ctx)
 	if err != nil {
 		return "", err
