@@ -3,6 +3,7 @@ module github.com/dlukt/pdns-manager
 go 1.24.6
 
 require (
+	entgo.io/ent v0.14.5 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/cobra v1.9.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
