@@ -10,24 +10,24 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/dlukt/pdns-manager/ent/setting"
+	"github.com/dlukt/pdns-manager/ent/settings"
 )
 
-// SettingCreate is the builder for creating a Setting entity.
-type SettingCreate struct {
+// SettingsCreate is the builder for creating a Settings entity.
+type SettingsCreate struct {
 	config
-	mutation *SettingMutation
+	mutation *SettingsMutation
 	hooks    []Hook
 }
 
 // SetCreateTime sets the "create_time" field.
-func (_c *SettingCreate) SetCreateTime(v time.Time) *SettingCreate {
+func (_c *SettingsCreate) SetCreateTime(v time.Time) *SettingsCreate {
 	_c.mutation.SetCreateTime(v)
 	return _c
 }
 
 // SetNillableCreateTime sets the "create_time" field if the given value is not nil.
-func (_c *SettingCreate) SetNillableCreateTime(v *time.Time) *SettingCreate {
+func (_c *SettingsCreate) SetNillableCreateTime(v *time.Time) *SettingsCreate {
 	if v != nil {
 		_c.SetCreateTime(*v)
 	}
@@ -35,74 +35,44 @@ func (_c *SettingCreate) SetNillableCreateTime(v *time.Time) *SettingCreate {
 }
 
 // SetUpdateTime sets the "update_time" field.
-func (_c *SettingCreate) SetUpdateTime(v time.Time) *SettingCreate {
+func (_c *SettingsCreate) SetUpdateTime(v time.Time) *SettingsCreate {
 	_c.mutation.SetUpdateTime(v)
 	return _c
 }
 
 // SetNillableUpdateTime sets the "update_time" field if the given value is not nil.
-func (_c *SettingCreate) SetNillableUpdateTime(v *time.Time) *SettingCreate {
+func (_c *SettingsCreate) SetNillableUpdateTime(v *time.Time) *SettingsCreate {
 	if v != nil {
 		_c.SetUpdateTime(*v)
 	}
 	return _c
 }
 
-// SetPdnsAPIURL sets the "pdns_api_url" field.
-func (_c *SettingCreate) SetPdnsAPIURL(v string) *SettingCreate {
-	_c.mutation.SetPdnsAPIURL(v)
+// SetKey sets the "key" field.
+func (_c *SettingsCreate) SetKey(v string) *SettingsCreate {
+	_c.mutation.SetKey(v)
 	return _c
 }
 
-// SetNillablePdnsAPIURL sets the "pdns_api_url" field if the given value is not nil.
-func (_c *SettingCreate) SetNillablePdnsAPIURL(v *string) *SettingCreate {
-	if v != nil {
-		_c.SetPdnsAPIURL(*v)
-	}
+// SetValue sets the "value" field.
+func (_c *SettingsCreate) SetValue(v string) *SettingsCreate {
+	_c.mutation.SetValue(v)
 	return _c
 }
 
-// SetPdnsAPIKey sets the "pdns_api_key" field.
-func (_c *SettingCreate) SetPdnsAPIKey(v string) *SettingCreate {
-	_c.mutation.SetPdnsAPIKey(v)
-	return _c
-}
-
-// SetNillablePdnsAPIKey sets the "pdns_api_key" field if the given value is not nil.
-func (_c *SettingCreate) SetNillablePdnsAPIKey(v *string) *SettingCreate {
-	if v != nil {
-		_c.SetPdnsAPIKey(*v)
-	}
-	return _c
-}
-
-// SetID sets the "id" field.
-func (_c *SettingCreate) SetID(v int) *SettingCreate {
-	_c.mutation.SetID(v)
-	return _c
-}
-
-// SetNillableID sets the "id" field if the given value is not nil.
-func (_c *SettingCreate) SetNillableID(v *int) *SettingCreate {
-	if v != nil {
-		_c.SetID(*v)
-	}
-	return _c
-}
-
-// Mutation returns the SettingMutation object of the builder.
-func (_c *SettingCreate) Mutation() *SettingMutation {
+// Mutation returns the SettingsMutation object of the builder.
+func (_c *SettingsCreate) Mutation() *SettingsMutation {
 	return _c.mutation
 }
 
-// Save creates the Setting in the database.
-func (_c *SettingCreate) Save(ctx context.Context) (*Setting, error) {
+// Save creates the Settings in the database.
+func (_c *SettingsCreate) Save(ctx context.Context) (*Settings, error) {
 	_c.defaults()
 	return withHooks(ctx, _c.sqlSave, _c.mutation, _c.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
-func (_c *SettingCreate) SaveX(ctx context.Context) *Setting {
+func (_c *SettingsCreate) SaveX(ctx context.Context) *Settings {
 	v, err := _c.Save(ctx)
 	if err != nil {
 		panic(err)
@@ -111,43 +81,45 @@ func (_c *SettingCreate) SaveX(ctx context.Context) *Setting {
 }
 
 // Exec executes the query.
-func (_c *SettingCreate) Exec(ctx context.Context) error {
+func (_c *SettingsCreate) Exec(ctx context.Context) error {
 	_, err := _c.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_c *SettingCreate) ExecX(ctx context.Context) {
+func (_c *SettingsCreate) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // defaults sets the default values of the builder before save.
-func (_c *SettingCreate) defaults() {
+func (_c *SettingsCreate) defaults() {
 	if _, ok := _c.mutation.CreateTime(); !ok {
-		v := setting.DefaultCreateTime()
+		v := settings.DefaultCreateTime()
 		_c.mutation.SetCreateTime(v)
 	}
 	if _, ok := _c.mutation.UpdateTime(); !ok {
-		v := setting.DefaultUpdateTime()
+		v := settings.DefaultUpdateTime()
 		_c.mutation.SetUpdateTime(v)
-	}
-	if _, ok := _c.mutation.ID(); !ok {
-		v := setting.DefaultID
-		_c.mutation.SetID(v)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (_c *SettingCreate) check() error {
+func (_c *SettingsCreate) check() error {
 	if _, ok := _c.mutation.CreateTime(); !ok {
-		return &ValidationError{Name: "create_time", err: errors.New(`ent: missing required field "Setting.create_time"`)}
+		return &ValidationError{Name: "create_time", err: errors.New(`ent: missing required field "Settings.create_time"`)}
+	}
+	if _, ok := _c.mutation.Key(); !ok {
+		return &ValidationError{Name: "key", err: errors.New(`ent: missing required field "Settings.key"`)}
+	}
+	if _, ok := _c.mutation.Value(); !ok {
+		return &ValidationError{Name: "value", err: errors.New(`ent: missing required field "Settings.value"`)}
 	}
 	return nil
 }
 
-func (_c *SettingCreate) sqlSave(ctx context.Context) (*Setting, error) {
+func (_c *SettingsCreate) sqlSave(ctx context.Context) (*Settings, error) {
 	if err := _c.check(); err != nil {
 		return nil, err
 	}
@@ -158,64 +130,58 @@ func (_c *SettingCreate) sqlSave(ctx context.Context) (*Setting, error) {
 		}
 		return nil, err
 	}
-	if _spec.ID.Value != _node.ID {
-		id := _spec.ID.Value.(int64)
-		_node.ID = int(id)
-	}
+	id := _spec.ID.Value.(int64)
+	_node.ID = int(id)
 	_c.mutation.id = &_node.ID
 	_c.mutation.done = true
 	return _node, nil
 }
 
-func (_c *SettingCreate) createSpec() (*Setting, *sqlgraph.CreateSpec) {
+func (_c *SettingsCreate) createSpec() (*Settings, *sqlgraph.CreateSpec) {
 	var (
-		_node = &Setting{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(setting.Table, sqlgraph.NewFieldSpec(setting.FieldID, field.TypeInt))
+		_node = &Settings{config: _c.config}
+		_spec = sqlgraph.NewCreateSpec(settings.Table, sqlgraph.NewFieldSpec(settings.FieldID, field.TypeInt))
 	)
-	if id, ok := _c.mutation.ID(); ok {
-		_node.ID = id
-		_spec.ID.Value = id
-	}
 	if value, ok := _c.mutation.CreateTime(); ok {
-		_spec.SetField(setting.FieldCreateTime, field.TypeTime, value)
+		_spec.SetField(settings.FieldCreateTime, field.TypeTime, value)
 		_node.CreateTime = value
 	}
 	if value, ok := _c.mutation.UpdateTime(); ok {
-		_spec.SetField(setting.FieldUpdateTime, field.TypeTime, value)
+		_spec.SetField(settings.FieldUpdateTime, field.TypeTime, value)
 		_node.UpdateTime = value
 	}
-	if value, ok := _c.mutation.PdnsAPIURL(); ok {
-		_spec.SetField(setting.FieldPdnsAPIURL, field.TypeString, value)
-		_node.PdnsAPIURL = value
+	if value, ok := _c.mutation.Key(); ok {
+		_spec.SetField(settings.FieldKey, field.TypeString, value)
+		_node.Key = value
 	}
-	if value, ok := _c.mutation.PdnsAPIKey(); ok {
-		_spec.SetField(setting.FieldPdnsAPIKey, field.TypeString, value)
-		_node.PdnsAPIKey = value
+	if value, ok := _c.mutation.Value(); ok {
+		_spec.SetField(settings.FieldValue, field.TypeString, value)
+		_node.Value = value
 	}
 	return _node, _spec
 }
 
-// SettingCreateBulk is the builder for creating many Setting entities in bulk.
-type SettingCreateBulk struct {
+// SettingsCreateBulk is the builder for creating many Settings entities in bulk.
+type SettingsCreateBulk struct {
 	config
 	err      error
-	builders []*SettingCreate
+	builders []*SettingsCreate
 }
 
-// Save creates the Setting entities in the database.
-func (_c *SettingCreateBulk) Save(ctx context.Context) ([]*Setting, error) {
+// Save creates the Settings entities in the database.
+func (_c *SettingsCreateBulk) Save(ctx context.Context) ([]*Settings, error) {
 	if _c.err != nil {
 		return nil, _c.err
 	}
 	specs := make([]*sqlgraph.CreateSpec, len(_c.builders))
-	nodes := make([]*Setting, len(_c.builders))
+	nodes := make([]*Settings, len(_c.builders))
 	mutators := make([]Mutator, len(_c.builders))
 	for i := range _c.builders {
 		func(i int, root context.Context) {
 			builder := _c.builders[i]
 			builder.defaults()
 			var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-				mutation, ok := m.(*SettingMutation)
+				mutation, ok := m.(*SettingsMutation)
 				if !ok {
 					return nil, fmt.Errorf("unexpected mutation type %T", m)
 				}
@@ -240,7 +206,7 @@ func (_c *SettingCreateBulk) Save(ctx context.Context) ([]*Setting, error) {
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				if specs[i].ID.Value != nil && nodes[i].ID == 0 {
+				if specs[i].ID.Value != nil {
 					id := specs[i].ID.Value.(int64)
 					nodes[i].ID = int(id)
 				}
@@ -262,7 +228,7 @@ func (_c *SettingCreateBulk) Save(ctx context.Context) ([]*Setting, error) {
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (_c *SettingCreateBulk) SaveX(ctx context.Context) []*Setting {
+func (_c *SettingsCreateBulk) SaveX(ctx context.Context) []*Settings {
 	v, err := _c.Save(ctx)
 	if err != nil {
 		panic(err)
@@ -271,13 +237,13 @@ func (_c *SettingCreateBulk) SaveX(ctx context.Context) []*Setting {
 }
 
 // Exec executes the query.
-func (_c *SettingCreateBulk) Exec(ctx context.Context) error {
+func (_c *SettingsCreateBulk) Exec(ctx context.Context) error {
 	_, err := _c.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_c *SettingCreateBulk) ExecX(ctx context.Context) {
+func (_c *SettingsCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
 		panic(err)
 	}

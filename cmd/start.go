@@ -17,6 +17,7 @@ import (
 	"github.com/dlukt/pdns-manager/auth"
 	"github.com/dlukt/pdns-manager/config"
 	"github.com/dlukt/pdns-manager/ent"
+	"github.com/dlukt/pdns-manager/ent/settings"
 	"github.com/dlukt/pdns-manager/session"
 	"github.com/dlukt/pdns-manager/web"
 	"github.com/spf13/cobra"
@@ -74,14 +75,14 @@ var startCmd = &cobra.Command{
 		if e := client.Schema.Create(context.Background()); e != nil {
 			log.Fatalf("failed creating schema: %v", e)
 		}
-		if pdnsURL == "" || pdnsKey == "" {
-			if s, err := client.Setting.Get(context.Background(), 1); err == nil {
-				if pdnsURL == "" {
-					pdnsURL = s.PdnsAPIURL
-				}
-				if pdnsKey == "" {
-					pdnsKey = s.PdnsAPIKey
-				}
+		if pdnsURL == "" {
+			if s, err := client.Settings.Query().Where(settings.KeyEQ("pdns_api_url")).Only(context.Background()); err == nil {
+				pdnsURL = s.Value
+			}
+		}
+		if pdnsKey == "" {
+			if s, err := client.Settings.Query().Where(settings.KeyEQ("pdns_api_key")).Only(context.Background()); err == nil {
+				pdnsKey = s.Value
 			}
 		}
 		config.PDNSAPIURL = pdnsURL

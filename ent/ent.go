@@ -12,7 +12,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/dlukt/pdns-manager/ent/setting"
+	"github.com/dlukt/pdns-manager/ent/settings"
 	"github.com/dlukt/pdns-manager/ent/user"
 )
 
@@ -74,8 +74,8 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			setting.Table: setting.ValidColumn,
-			user.Table:    user.ValidColumn,
+			settings.Table: settings.ValidColumn,
+			user.Table:     user.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

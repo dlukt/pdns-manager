@@ -11,6 +11,7 @@ import (
 	"github.com/dlukt/pdns-manager/auth"
 	"github.com/dlukt/pdns-manager/config"
 	"github.com/dlukt/pdns-manager/ent"
+	"github.com/dlukt/pdns-manager/ent/settings"
 	"github.com/dlukt/pdns-manager/session"
 )
 
@@ -267,7 +268,8 @@ func (h *handler) confirmMail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) getServerSettings(w http.ResponseWriter, r *http.Request) {
-	s, _ := h.client.Setting.Get(r.Context(), 1)
+	urlSetting := h.client.Settings.Query().Where(settings.KeyEQ("pdns_api_url")).OnlyX(r.Context())
+	keySetting := h.client.Settings.Query().Where(settings.KeyEQ("pdns_api_key")).OnlyX(r.Context())
 	data := struct {
 		Title      string
 		PDNSAPIURL string
@@ -275,9 +277,11 @@ func (h *handler) getServerSettings(w http.ResponseWriter, r *http.Request) {
 		Error      string
 		Message    string
 	}{Title: "Server Settings"}
-	if s != nil {
-		data.PDNSAPIURL = s.PdnsAPIURL
-		data.PDNSAPIKey = s.PdnsAPIKey
+	if urlSetting != nil {
+		data.PDNSAPIURL = urlSetting.Value
+	}
+	if keySetting != nil {
+		data.PDNSAPIKey = keySetting.Value
 	}
 	if err := tmpl["settings/server.html"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -312,14 +316,22 @@ func (h *handler) postServerSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if _, err := h.client.Setting.Get(r.Context(), 1); err == nil {
-		_, err = h.client.Setting.UpdateOneID(1).SetPdnsAPIURL(pdnsURL).SetPdnsAPIKey(pdnsKey).Save(r.Context())
-		if err != nil {
+	if _, err := h.client.Settings.Update().Where(settings.KeyEQ("pdns_api_url")).SetValue(pdnsURL).Save(r.Context()); err != nil {
+		if !ent.IsNotFound(err) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-	} else {
-		if _, err := h.client.Setting.Create().SetID(1).SetPdnsAPIURL(pdnsURL).SetPdnsAPIKey(pdnsKey).Save(r.Context()); err != nil {
+		if _, err := h.client.Settings.Create().SetKey("pdns_api_url").SetValue(pdnsURL).Save(r.Context()); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if _, err := h.client.Settings.Update().Where(settings.KeyEQ("pdns_api_key")).SetValue(pdnsKey).Save(r.Context()); err != nil {
+		if !ent.IsNotFound(err) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if _, err := h.client.Settings.Create().SetKey("pdns_api_key").SetValue(pdnsKey).Save(r.Context()); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
