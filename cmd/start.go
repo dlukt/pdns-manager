@@ -57,11 +57,35 @@ var startCmd = &cobra.Command{
 			mailFrom = config.MailFrom
 		}
 
+		var pdnsURL, pdnsKey string
+		if config.PDNSAPIURL == "" {
+			pdnsURL = os.Getenv("PDNS_API_URL")
+		} else {
+			pdnsURL = config.PDNSAPIURL
+		}
+		if config.PDNSAPIKey == "" {
+			pdnsKey = os.Getenv("PDNS_API_KEY")
+		} else {
+			pdnsKey = config.PDNSAPIKey
+		}
+
 		client := openDatabaseConnection(dsn)
 		defer client.Close()
 		if e := client.Schema.Create(context.Background()); e != nil {
 			log.Fatalf("failed creating schema: %v", e)
 		}
+		if pdnsURL == "" || pdnsKey == "" {
+			if s, err := client.Setting.Get(context.Background(), 1); err == nil {
+				if pdnsURL == "" {
+					pdnsURL = s.PdnsAPIURL
+				}
+				if pdnsKey == "" {
+					pdnsKey = s.PdnsAPIKey
+				}
+			}
+		}
+		config.PDNSAPIURL = pdnsURL
+		config.PDNSAPIKey = pdnsKey
 		key := make([]byte, 32)
 		if _, err := rand.Read(key); err != nil {
 			log.Fatalf("failed generating session key: %v", err)
@@ -72,7 +96,7 @@ var startCmd = &cobra.Command{
 			mailer = auth.NewSMTPMailer(smtpAddr, smtpUser, smtpPass, mailFrom)
 		}
 		sessions := session.NewStore(key)
-		mux := web.NewHandler(auth.NewService(client, mailer), sessions)
+		mux := web.NewHandler(client, auth.NewService(client, mailer), sessions)
 		fmt.Println("listening on :8080")
 		if err := http.ListenAndServe(":8080", mux); err != nil && err != http.ErrServerClosed {
 			fmt.Println("server error:", err)
@@ -85,6 +109,8 @@ func init() {
 	startCmd.Flags().StringVar(&config.SMTPUser, "smtp-user", "", "SMTP username")
 	startCmd.Flags().StringVar(&config.SMTPPass, "smtp-pass", "", "SMTP password")
 	startCmd.Flags().StringVar(&config.MailFrom, "mail-from", "", "From email address")
+	startCmd.Flags().StringVar(&config.PDNSAPIURL, "pdns-api-url", "", "PowerDNS API URL")
+	startCmd.Flags().StringVar(&config.PDNSAPIKey, "pdns-api-key", "", "PowerDNS API Key")
 	rootCmd.AddCommand(startCmd)
 }
 
