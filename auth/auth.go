@@ -13,11 +13,12 @@ import (
 // Service provides user authentication operations.
 type Service struct {
 	client *ent.Client
+	mailer Mailer
 }
 
 // NewService returns a new Service.
-func NewService(c *ent.Client) *Service {
-	return &Service{client: c}
+func NewService(c *ent.Client, m Mailer) *Service {
+	return &Service{client: c, mailer: m}
 }
 
 // RegisterInput is used to create a new user.
@@ -43,6 +44,9 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*ent.User, st
 		SetVerificationToken(token).
 		Save(ctx)
 	if err != nil {
+		return nil, "", err
+	}
+	if err := s.mailer.SendMail(in.Email, "Verify your email", "Verification token: "+token); err != nil {
 		return nil, "", err
 	}
 	return u, token, nil
@@ -110,6 +114,9 @@ func (s *Service) ChangeEmail(ctx context.Context, id string, newEmail string) (
 	if err != nil {
 		return "", err
 	}
+	if err := s.mailer.SendMail(newEmail, "Verify your email", "Verification token: "+token); err != nil {
+		return "", err
+	}
 	return token, nil
 }
 
@@ -127,6 +134,9 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string) (strin
 	token := xid.New().String()
 	err = s.client.User.UpdateOne(u).SetResetToken(token).Exec(ctx)
 	if err != nil {
+		return "", err
+	}
+	if err := s.mailer.SendMail(email, "Password reset", "Reset token: "+token); err != nil {
 		return "", err
 	}
 	return token, nil
