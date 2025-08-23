@@ -1,0 +1,19 @@
+{{define "settings/server.html"}}
+{{template "layout" .}}
+{{end}}
+{{define "content"}}
+<h1 class="text-2xl font-bold mb-4">Server Settings</h1>
+{{if .Error}}<p class="text-red-500 mb-4">{{.Error}}</p>{{end}}
+{{if .Message}}<p class="text-green-500 mb-4">{{.Message}}</p>{{end}}
+<form method="POST" action="/settings/server" class="space-y-4 max-w-md">
+    <div>
+        <label class="block mb-1" for="pdns_api_url">PowerDNS API URL</label>
+        <input id="pdns_api_url" name="pdns_api_url" type="text" value="{{.PDNSAPIURL}}" class="w-full p-2 border rounded" required>
+    </div>
+    <div>
+        <label class="block mb-1" for="pdns_api_key">PowerDNS API Key</label>
+        <input id="pdns_api_key" name="pdns_api_key" type="text" value="{{.PDNSAPIKey}}" class="w-full p-2 border rounded" required>
+    </div>
+    <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Save</button>
+</form>
+{{end}}
