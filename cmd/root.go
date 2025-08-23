@@ -1,27 +1,19 @@
 /*
 Copyright © 2025 Darko Luketic <info@icod.de>
-
 */
 package cmd
 
 import (
 	"os"
 
+	"github.com/dlukt/pdns-manager/config"
 	"github.com/spf13/cobra"
 )
-
-
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "pdns-manager",
 	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },
@@ -43,9 +35,9 @@ func init() {
 
 	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.pdns-manager.yaml)")
 
+	rootCmd.PersistentFlags().StringVar(&config.DSN, "dsn", "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable", "database DSN")
+
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
-
-

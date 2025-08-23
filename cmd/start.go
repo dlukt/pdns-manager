@@ -4,15 +4,21 @@ Copyright © 2025 Darko Luketic <info@icod.de>
 package cmd
 
 import (
+	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
 	"github.com/dlukt/pdns-manager/auth"
 	"github.com/dlukt/pdns-manager/config"
 	"github.com/dlukt/pdns-manager/ent"
 	"github.com/dlukt/pdns-manager/web"
-	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/spf13/cobra"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // startCmd represents the start command
@@ -20,11 +26,11 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "starts the server",
 	Run: func(cmd *cobra.Command, args []string) {
-		client, err := ent.Open("pgx", config.DSN)
-		if err != nil {
-			fmt.Println("database error:", err)
-			return
+		dsn := os.Getenv("DSN")
+		if dsn == "" {
+			dsn = config.DSN
 		}
+		client := openDatabaseConnection(config.DSN)
 		defer client.Close()
 		var mailer auth.Mailer = auth.NewLogMailer()
 		if config.SMTPAddr != "" && config.MailFrom != "" {
@@ -39,10 +45,21 @@ var startCmd = &cobra.Command{
 }
 
 func init() {
-	startCmd.Flags().StringVar(&config.DSN, "dsn", "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable", "database DSN")
 	startCmd.Flags().StringVar(&config.SMTPAddr, "smtp-addr", "", "SMTP server address host:port")
 	startCmd.Flags().StringVar(&config.SMTPUser, "smtp-user", "", "SMTP username")
 	startCmd.Flags().StringVar(&config.SMTPPass, "smtp-pass", "", "SMTP password")
 	startCmd.Flags().StringVar(&config.MailFrom, "mail-from", "", "From email address")
 	rootCmd.AddCommand(startCmd)
+}
+
+// Open new connection
+func openDatabaseConnection(databaseUrl string) *ent.Client {
+	db, err := sql.Open("pgx", databaseUrl)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create an ent.Driver from `db`.
+	drv := entsql.OpenDB(dialect.Postgres, db)
+	return ent.NewClient(ent.Driver(drv))
 }
