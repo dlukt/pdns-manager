@@ -70,12 +70,12 @@ func (h *handler) postRegister(w http.ResponseWriter, r *http.Request) {
 		Email:     r.FormValue("email"),
 		Password:  r.FormValue("password"),
 	}
-	_, token, err := h.auth.Register(r.Context(), in)
+	_, _, err := h.auth.Register(r.Context(), in)
 	data := struct{ Title, Error, Message string }{Title: "Register"}
 	if err != nil {
 		data.Error = err.Error()
 	} else {
-		data.Message = "Registration successful. Verification token: " + token
+		data.Message = "Registration successful. Please check your email for a verification link."
 	}
 	if err := tmpl.ExecuteTemplate(w, "register.html", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -130,11 +130,11 @@ func (h *handler) postReset(w http.ResponseWriter, r *http.Request) {
 			data.Message = "Password reset successful"
 		}
 	} else {
-		t, err := h.auth.RequestPasswordReset(r.Context(), r.FormValue("email"))
+		_, err := h.auth.RequestPasswordReset(r.Context(), r.FormValue("email"))
 		if err != nil {
 			data.Error = err.Error()
 		} else {
-			data.Message = "Reset token: " + t
+			data.Message = "Password reset email sent"
 		}
 	}
 	if err := tmpl.ExecuteTemplate(w, "reset.html", data); err != nil {

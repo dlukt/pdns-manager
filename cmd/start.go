@@ -16,7 +16,11 @@ import (
 
 // startCmd represents the start command
 var (
-	dsn string
+	dsn      string
+	smtpAddr string
+	smtpUser string
+	smtpPass string
+	mailFrom string
 )
 
 var startCmd = &cobra.Command{
@@ -29,7 +33,11 @@ var startCmd = &cobra.Command{
 			return
 		}
 		defer client.Close()
-		mux := web.NewHandler(auth.NewService(client))
+		var mailer auth.Mailer = auth.NewLogMailer()
+		if smtpAddr != "" && mailFrom != "" {
+			mailer = auth.NewSMTPMailer(smtpAddr, smtpUser, smtpPass, mailFrom)
+		}
+		mux := web.NewHandler(auth.NewService(client, mailer))
 		fmt.Println("listening on :8080")
 		if err := http.ListenAndServe(":8080", mux); err != nil && err != http.ErrServerClosed {
 			fmt.Println("server error:", err)
@@ -39,5 +47,9 @@ var startCmd = &cobra.Command{
 
 func init() {
 	startCmd.Flags().StringVar(&dsn, "dsn", "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable", "database DSN")
+	startCmd.Flags().StringVar(&smtpAddr, "smtp-addr", "", "SMTP server address host:port")
+	startCmd.Flags().StringVar(&smtpUser, "smtp-user", "", "SMTP username")
+	startCmd.Flags().StringVar(&smtpPass, "smtp-pass", "", "SMTP password")
+	startCmd.Flags().StringVar(&mailFrom, "mail-from", "", "From email address")
 	rootCmd.AddCommand(startCmd)
 }
