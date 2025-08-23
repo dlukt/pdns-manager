@@ -1,0 +1,12 @@
+{
+  "name": "pdns-manager",
+  "version": "1.0.0",
+  "description": "",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i web/tailwind.css -o web/static/style.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}
