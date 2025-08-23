@@ -75,10 +75,10 @@ func NewHandler(a *auth.Service, s *session.Store) http.Handler {
 
 func (h *handler) loginRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-                if strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/static/") {
-                        next.ServeHTTP(w, r)
-                        return
-                }
+    if strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/static/") {
+        next.ServeHTTP(w, r)
+        return
+    }
 		c, err := r.Cookie("session")
 		if err != nil {
 			http.Redirect(w, r, "/auth/login", http.StatusFound)
