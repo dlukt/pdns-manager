@@ -4,6 +4,7 @@ Copyright © 2025 Darko Luketic <info@icod.de>
 package cmd
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -56,6 +57,9 @@ var startCmd = &cobra.Command{
 
 		client := openDatabaseConnection(dsn)
 		defer client.Close()
+		if e := client.Schema.Create(context.Background()); e != nil {
+			log.Fatalf("failed creating schema: %v", e)
+		}
 		var mailer auth.Mailer = auth.NewLogMailer()
 		if config.SMTPAddr != "" && config.MailFrom != "" {
 			mailer = auth.NewSMTPMailer(smtpAddr, smtpUser, smtpPass, mailFrom)
