@@ -40,6 +40,8 @@ func NewHandler(a *auth.Service) http.Handler {
 	mux.HandleFunc("POST /login", h.postLogin)
 	mux.HandleFunc("GET /reset", h.getReset)
 	mux.HandleFunc("POST /reset", h.postReset)
+	mux.HandleFunc("GET /forgot", h.getForgot)
+	mux.HandleFunc("POST /forgot", h.postForgot)
 	mux.HandleFunc("GET /confirm_mail", h.confirmMail)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 	return mux
@@ -120,24 +122,38 @@ func (h *handler) postReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := r.FormValue("token")
-	data := struct{ Title, Token, Error, Message string }{Title: "Reset Password"}
-	if token != "" {
-		data.Token = token
-		err := h.auth.ResetPassword(r.Context(), token, r.FormValue("password"))
-		if err != nil {
-			data.Error = err.Error()
-		} else {
-			data.Message = "Password reset successful"
-		}
+	data := struct{ Title, Token, Error, Message string }{Title: "Reset Password", Token: token}
+	err := h.auth.ResetPassword(r.Context(), token, r.FormValue("password"))
+	if err != nil {
+		data.Error = err.Error()
 	} else {
-		_, err := h.auth.RequestPasswordReset(r.Context(), r.FormValue("email"))
-		if err != nil {
-			data.Error = err.Error()
-		} else {
-			data.Message = "Password reset email sent"
-		}
+		data.Message = "Password reset successful"
 	}
 	if err := tmpl.ExecuteTemplate(w, "reset.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h *handler) getForgot(w http.ResponseWriter, r *http.Request) {
+	data := struct{ Title, Error, Message string }{Title: "Forgot Password"}
+	if err := tmpl.ExecuteTemplate(w, "forgot.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h *handler) postForgot(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	_, err := h.auth.RequestPasswordReset(r.Context(), r.FormValue("email"))
+	data := struct{ Title, Error, Message string }{Title: "Forgot Password"}
+	if err != nil {
+		data.Error = err.Error()
+	} else {
+		data.Message = "Password reset email sent"
+	}
+	if err := tmpl.ExecuteTemplate(w, "forgot.html", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
