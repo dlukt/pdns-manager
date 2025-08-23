@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"fmt"
 	"log"
@@ -16,6 +17,7 @@ import (
 	"github.com/dlukt/pdns-manager/auth"
 	"github.com/dlukt/pdns-manager/config"
 	"github.com/dlukt/pdns-manager/ent"
+	"github.com/dlukt/pdns-manager/session"
 	"github.com/dlukt/pdns-manager/web"
 	"github.com/spf13/cobra"
 
@@ -60,11 +62,17 @@ var startCmd = &cobra.Command{
 		if e := client.Schema.Create(context.Background()); e != nil {
 			log.Fatalf("failed creating schema: %v", e)
 		}
+		key := make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			log.Fatalf("failed generating session key: %v", err)
+		}
+
 		var mailer auth.Mailer = auth.NewLogMailer()
 		if config.SMTPAddr != "" && config.MailFrom != "" {
 			mailer = auth.NewSMTPMailer(smtpAddr, smtpUser, smtpPass, mailFrom)
 		}
-		mux := web.NewHandler(auth.NewService(client, mailer))
+		sessions := session.NewStore(key)
+		mux := web.NewHandler(auth.NewService(client, mailer), sessions)
 		fmt.Println("listening on :8080")
 		if err := http.ListenAndServe(":8080", mux); err != nil && err != http.ErrServerClosed {
 			fmt.Println("server error:", err)
