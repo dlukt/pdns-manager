@@ -64,6 +64,7 @@ func NewHandler(a *auth.Service, s *session.Store) http.Handler {
 	mux.HandleFunc("POST /auth/register", h.postRegister)
 	mux.HandleFunc("GET /auth/login", h.getLogin)
 	mux.HandleFunc("POST /auth/login", h.postLogin)
+	mux.HandleFunc("GET /auth/logout", h.getLogout)
 	mux.HandleFunc("GET /auth/reset", h.getReset)
 	mux.HandleFunc("POST /auth/reset", h.postReset)
 	mux.HandleFunc("GET /auth/forgot", h.getForgot)
@@ -160,6 +161,15 @@ func (h *handler) postLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: "session", Value: token, Path: "/", HttpOnly: true})
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func (h *handler) getLogout(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("session")
+	if err == nil {
+		h.sessions.Delete(c.Value)
+		http.SetCookie(w, &http.Cookie{Name: "session", Value: "", Path: "/", HttpOnly: true, MaxAge: -1})
+	}
+	http.Redirect(w, r, "/auth/login", http.StatusFound)
 }
 
 func (h *handler) getReset(w http.ResponseWriter, r *http.Request) {
