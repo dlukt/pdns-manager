@@ -4,9 +4,10 @@
   "description": "",
   "private": true,
   "scripts": {
+    "watch:css": "tailwindcss -i web/tailwind.css -o web/static/style.css --watch",
     "build:css": "tailwindcss -i web/tailwind.css -o web/static/style.css --minify"
   },
   "devDependencies": {
-    "tailwindcss": "^3.4.17"
+    "tailwindcss": "^4.1.12"
   }
 }
