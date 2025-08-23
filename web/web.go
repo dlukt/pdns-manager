@@ -5,13 +5,16 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/dlukt/pdns-manager/auth"
+	"github.com/dlukt/pdns-manager/config"
+	"github.com/dlukt/pdns-manager/ent"
 	"github.com/dlukt/pdns-manager/session"
 )
 
-//go:embed templates/*.html templates/auth/*.html static/*
+//go:embed templates/*.html templates/auth/*.html templates/settings/*.html static/*
 var contentFS embed.FS
 
 var (
@@ -53,11 +56,12 @@ func mustTemplates() *template.Template {
 type handler struct {
 	auth     *auth.Service
 	sessions *session.Store
+	client   *ent.Client
 }
 
 // NewHandler returns an http.Handler with application routes.
-func NewHandler(a *auth.Service, s *session.Store) http.Handler {
-	h := &handler{auth: a, sessions: s}
+func NewHandler(c *ent.Client, a *auth.Service, s *session.Store) http.Handler {
+	h := &handler{auth: a, sessions: s, client: c}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", h.index)
 	mux.HandleFunc("GET /auth/register", h.getRegister)
@@ -70,6 +74,8 @@ func NewHandler(a *auth.Service, s *session.Store) http.Handler {
 	mux.HandleFunc("GET /auth/forgot", h.getForgot)
 	mux.HandleFunc("POST /auth/forgot", h.postForgot)
 	mux.HandleFunc("GET /auth/confirm_mail", h.confirmMail)
+	mux.HandleFunc("GET /settings/server", h.getServerSettings)
+	mux.HandleFunc("POST /settings/server", h.postServerSettings)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 	return h.loginRequired(mux)
 }
@@ -232,6 +238,72 @@ func (h *handler) confirmMail(w http.ResponseWriter, r *http.Request) {
 		data.Message = "Email confirmed"
 	}
 	if err := tmpl.ExecuteTemplate(w, "auth/confirm.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h *handler) getServerSettings(w http.ResponseWriter, r *http.Request) {
+	s, _ := h.client.Setting.Get(r.Context(), 1)
+	data := struct {
+		Title      string
+		PDNSAPIURL string
+		PDNSAPIKey string
+		Error      string
+		Message    string
+	}{Title: "Server Settings"}
+	if s != nil {
+		data.PDNSAPIURL = s.PdnsAPIURL
+		data.PDNSAPIKey = s.PdnsAPIKey
+	}
+	if err := tmpl.ExecuteTemplate(w, "settings/server.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h *handler) postServerSettings(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	pdnsURL := r.FormValue("pdns_api_url")
+	pdnsKey := r.FormValue("pdns_api_key")
+	data := struct {
+		Title      string
+		PDNSAPIURL string
+		PDNSAPIKey string
+		Error      string
+		Message    string
+	}{Title: "Server Settings", PDNSAPIURL: pdnsURL, PDNSAPIKey: pdnsKey}
+	if _, err := url.ParseRequestURI(pdnsURL); err != nil {
+		data.Error = "invalid URL"
+		if err := tmpl.ExecuteTemplate(w, "settings/server.html", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	if strings.TrimSpace(pdnsKey) == "" {
+		data.Error = "API key required"
+		if err := tmpl.ExecuteTemplate(w, "settings/server.html", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	if _, err := h.client.Setting.Get(r.Context(), 1); err == nil {
+		_, err = h.client.Setting.UpdateOneID(1).SetPdnsAPIURL(pdnsURL).SetPdnsAPIKey(pdnsKey).Save(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if _, err := h.client.Setting.Create().SetID(1).SetPdnsAPIURL(pdnsURL).SetPdnsAPIKey(pdnsKey).Save(r.Context()); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	config.PDNSAPIURL = pdnsURL
+	config.PDNSAPIKey = pdnsKey
+	data.Message = "Settings saved"
+	if err := tmpl.ExecuteTemplate(w, "settings/server.html", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
