@@ -13,8 +13,8 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "create_time", Type: field.TypeTime},
 		{Name: "update_time", Type: field.TypeTime, Nullable: true},
-		{Name: "pdns_api_url", Type: field.TypeString, Nullable: true},
-		{Name: "pdns_api_key", Type: field.TypeString, Nullable: true},
+		{Name: "key", Type: field.TypeString, Unique: true},
+		{Name: "value", Type: field.TypeString},
 	}
 	// SettingsTable holds the schema information for the "settings" table.
 	SettingsTable = &schema.Table{

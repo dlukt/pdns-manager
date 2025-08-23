@@ -12,7 +12,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/dlukt/pdns-manager/ent/predicate"
-	"github.com/dlukt/pdns-manager/ent/setting"
+	"github.com/dlukt/pdns-manager/ent/settings"
 	"github.com/dlukt/pdns-manager/ent/user"
 )
 
@@ -25,37 +25,37 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
-	TypeSetting = "Setting"
-	TypeUser    = "User"
+	TypeSettings = "Settings"
+	TypeUser     = "User"
 )
 
-// SettingMutation represents an operation that mutates the Setting nodes in the graph.
-type SettingMutation struct {
+// SettingsMutation represents an operation that mutates the Settings nodes in the graph.
+type SettingsMutation struct {
 	config
 	op            Op
 	typ           string
 	id            *int
 	create_time   *time.Time
 	update_time   *time.Time
-	pdns_api_url  *string
-	pdns_api_key  *string
+	key           *string
+	value         *string
 	clearedFields map[string]struct{}
 	done          bool
-	oldValue      func(context.Context) (*Setting, error)
-	predicates    []predicate.Setting
+	oldValue      func(context.Context) (*Settings, error)
+	predicates    []predicate.Settings
 }
 
-var _ ent.Mutation = (*SettingMutation)(nil)
+var _ ent.Mutation = (*SettingsMutation)(nil)
 
-// settingOption allows management of the mutation configuration using functional options.
-type settingOption func(*SettingMutation)
+// settingsOption allows management of the mutation configuration using functional options.
+type settingsOption func(*SettingsMutation)
 
-// newSettingMutation creates new mutation for the Setting entity.
-func newSettingMutation(c config, op Op, opts ...settingOption) *SettingMutation {
-	m := &SettingMutation{
+// newSettingsMutation creates new mutation for the Settings entity.
+func newSettingsMutation(c config, op Op, opts ...settingsOption) *SettingsMutation {
+	m := &SettingsMutation{
 		config:        c,
 		op:            op,
-		typ:           TypeSetting,
+		typ:           TypeSettings,
 		clearedFields: make(map[string]struct{}),
 	}
 	for _, opt := range opts {
@@ -64,20 +64,20 @@ func newSettingMutation(c config, op Op, opts ...settingOption) *SettingMutation
 	return m
 }
 
-// withSettingID sets the ID field of the mutation.
-func withSettingID(id int) settingOption {
-	return func(m *SettingMutation) {
+// withSettingsID sets the ID field of the mutation.
+func withSettingsID(id int) settingsOption {
+	return func(m *SettingsMutation) {
 		var (
 			err   error
 			once  sync.Once
-			value *Setting
+			value *Settings
 		)
-		m.oldValue = func(ctx context.Context) (*Setting, error) {
+		m.oldValue = func(ctx context.Context) (*Settings, error) {
 			once.Do(func() {
 				if m.done {
 					err = errors.New("querying old values post mutation is not allowed")
 				} else {
-					value, err = m.Client().Setting.Get(ctx, id)
+					value, err = m.Client().Settings.Get(ctx, id)
 				}
 			})
 			return value, err
@@ -86,10 +86,10 @@ func withSettingID(id int) settingOption {
 	}
 }
 
-// withSetting sets the old Setting of the mutation.
-func withSetting(node *Setting) settingOption {
-	return func(m *SettingMutation) {
-		m.oldValue = func(context.Context) (*Setting, error) {
+// withSettings sets the old Settings of the mutation.
+func withSettings(node *Settings) settingsOption {
+	return func(m *SettingsMutation) {
+		m.oldValue = func(context.Context) (*Settings, error) {
 			return node, nil
 		}
 		m.id = &node.ID
@@ -98,7 +98,7 @@ func withSetting(node *Setting) settingOption {
 
 // Client returns a new `ent.Client` from the mutation. If the mutation was
 // executed in a transaction (ent.Tx), a transactional client is returned.
-func (m SettingMutation) Client() *Client {
+func (m SettingsMutation) Client() *Client {
 	client := &Client{config: m.config}
 	client.init()
 	return client
@@ -106,7 +106,7 @@ func (m SettingMutation) Client() *Client {
 
 // Tx returns an `ent.Tx` for mutations that were executed in transactions;
 // it returns an error otherwise.
-func (m SettingMutation) Tx() (*Tx, error) {
+func (m SettingsMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
 		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
@@ -115,15 +115,9 @@ func (m SettingMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// SetID sets the value of the id field. Note that this
-// operation is only accepted on creation of Setting entities.
-func (m *SettingMutation) SetID(id int) {
-	m.id = &id
-}
-
 // ID returns the ID value in the mutation. Note that the ID is only available
 // if it was provided to the builder or after it was returned from the database.
-func (m *SettingMutation) ID() (id int, exists bool) {
+func (m *SettingsMutation) ID() (id int, exists bool) {
 	if m.id == nil {
 		return
 	}
@@ -134,7 +128,7 @@ func (m *SettingMutation) ID() (id int, exists bool) {
 // That means, if the mutation is applied within a transaction with an isolation level such
 // as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
 // or updated by the mutation.
-func (m *SettingMutation) IDs(ctx context.Context) ([]int, error) {
+func (m *SettingsMutation) IDs(ctx context.Context) ([]int, error) {
 	switch {
 	case m.op.Is(OpUpdateOne | OpDeleteOne):
 		id, exists := m.ID()
@@ -143,19 +137,19 @@ func (m *SettingMutation) IDs(ctx context.Context) ([]int, error) {
 		}
 		fallthrough
 	case m.op.Is(OpUpdate | OpDelete):
-		return m.Client().Setting.Query().Where(m.predicates...).IDs(ctx)
+		return m.Client().Settings.Query().Where(m.predicates...).IDs(ctx)
 	default:
 		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
 	}
 }
 
 // SetCreateTime sets the "create_time" field.
-func (m *SettingMutation) SetCreateTime(t time.Time) {
+func (m *SettingsMutation) SetCreateTime(t time.Time) {
 	m.create_time = &t
 }
 
 // CreateTime returns the value of the "create_time" field in the mutation.
-func (m *SettingMutation) CreateTime() (r time.Time, exists bool) {
+func (m *SettingsMutation) CreateTime() (r time.Time, exists bool) {
 	v := m.create_time
 	if v == nil {
 		return
@@ -163,10 +157,10 @@ func (m *SettingMutation) CreateTime() (r time.Time, exists bool) {
 	return *v, true
 }
 
-// OldCreateTime returns the old "create_time" field's value of the Setting entity.
-// If the Setting object wasn't provided to the builder, the object is fetched from the database.
+// OldCreateTime returns the old "create_time" field's value of the Settings entity.
+// If the Settings object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SettingMutation) OldCreateTime(ctx context.Context) (v time.Time, err error) {
+func (m *SettingsMutation) OldCreateTime(ctx context.Context) (v time.Time, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldCreateTime is only allowed on UpdateOne operations")
 	}
@@ -181,17 +175,17 @@ func (m *SettingMutation) OldCreateTime(ctx context.Context) (v time.Time, err e
 }
 
 // ResetCreateTime resets all changes to the "create_time" field.
-func (m *SettingMutation) ResetCreateTime() {
+func (m *SettingsMutation) ResetCreateTime() {
 	m.create_time = nil
 }
 
 // SetUpdateTime sets the "update_time" field.
-func (m *SettingMutation) SetUpdateTime(t time.Time) {
+func (m *SettingsMutation) SetUpdateTime(t time.Time) {
 	m.update_time = &t
 }
 
 // UpdateTime returns the value of the "update_time" field in the mutation.
-func (m *SettingMutation) UpdateTime() (r time.Time, exists bool) {
+func (m *SettingsMutation) UpdateTime() (r time.Time, exists bool) {
 	v := m.update_time
 	if v == nil {
 		return
@@ -199,10 +193,10 @@ func (m *SettingMutation) UpdateTime() (r time.Time, exists bool) {
 	return *v, true
 }
 
-// OldUpdateTime returns the old "update_time" field's value of the Setting entity.
-// If the Setting object wasn't provided to the builder, the object is fetched from the database.
+// OldUpdateTime returns the old "update_time" field's value of the Settings entity.
+// If the Settings object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SettingMutation) OldUpdateTime(ctx context.Context) (v time.Time, err error) {
+func (m *SettingsMutation) OldUpdateTime(ctx context.Context) (v time.Time, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldUpdateTime is only allowed on UpdateOne operations")
 	}
@@ -217,130 +211,104 @@ func (m *SettingMutation) OldUpdateTime(ctx context.Context) (v time.Time, err e
 }
 
 // ClearUpdateTime clears the value of the "update_time" field.
-func (m *SettingMutation) ClearUpdateTime() {
+func (m *SettingsMutation) ClearUpdateTime() {
 	m.update_time = nil
-	m.clearedFields[setting.FieldUpdateTime] = struct{}{}
+	m.clearedFields[settings.FieldUpdateTime] = struct{}{}
 }
 
 // UpdateTimeCleared returns if the "update_time" field was cleared in this mutation.
-func (m *SettingMutation) UpdateTimeCleared() bool {
-	_, ok := m.clearedFields[setting.FieldUpdateTime]
+func (m *SettingsMutation) UpdateTimeCleared() bool {
+	_, ok := m.clearedFields[settings.FieldUpdateTime]
 	return ok
 }
 
 // ResetUpdateTime resets all changes to the "update_time" field.
-func (m *SettingMutation) ResetUpdateTime() {
+func (m *SettingsMutation) ResetUpdateTime() {
 	m.update_time = nil
-	delete(m.clearedFields, setting.FieldUpdateTime)
+	delete(m.clearedFields, settings.FieldUpdateTime)
 }
 
-// SetPdnsAPIURL sets the "pdns_api_url" field.
-func (m *SettingMutation) SetPdnsAPIURL(s string) {
-	m.pdns_api_url = &s
+// SetKey sets the "key" field.
+func (m *SettingsMutation) SetKey(s string) {
+	m.key = &s
 }
 
-// PdnsAPIURL returns the value of the "pdns_api_url" field in the mutation.
-func (m *SettingMutation) PdnsAPIURL() (r string, exists bool) {
-	v := m.pdns_api_url
+// Key returns the value of the "key" field in the mutation.
+func (m *SettingsMutation) Key() (r string, exists bool) {
+	v := m.key
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldPdnsAPIURL returns the old "pdns_api_url" field's value of the Setting entity.
-// If the Setting object wasn't provided to the builder, the object is fetched from the database.
+// OldKey returns the old "key" field's value of the Settings entity.
+// If the Settings object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SettingMutation) OldPdnsAPIURL(ctx context.Context) (v string, err error) {
+func (m *SettingsMutation) OldKey(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPdnsAPIURL is only allowed on UpdateOne operations")
+		return v, errors.New("OldKey is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPdnsAPIURL requires an ID field in the mutation")
+		return v, errors.New("OldKey requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPdnsAPIURL: %w", err)
+		return v, fmt.Errorf("querying old value for OldKey: %w", err)
 	}
-	return oldValue.PdnsAPIURL, nil
+	return oldValue.Key, nil
 }
 
-// ClearPdnsAPIURL clears the value of the "pdns_api_url" field.
-func (m *SettingMutation) ClearPdnsAPIURL() {
-	m.pdns_api_url = nil
-	m.clearedFields[setting.FieldPdnsAPIURL] = struct{}{}
+// ResetKey resets all changes to the "key" field.
+func (m *SettingsMutation) ResetKey() {
+	m.key = nil
 }
 
-// PdnsAPIURLCleared returns if the "pdns_api_url" field was cleared in this mutation.
-func (m *SettingMutation) PdnsAPIURLCleared() bool {
-	_, ok := m.clearedFields[setting.FieldPdnsAPIURL]
-	return ok
+// SetValue sets the "value" field.
+func (m *SettingsMutation) SetValue(s string) {
+	m.value = &s
 }
 
-// ResetPdnsAPIURL resets all changes to the "pdns_api_url" field.
-func (m *SettingMutation) ResetPdnsAPIURL() {
-	m.pdns_api_url = nil
-	delete(m.clearedFields, setting.FieldPdnsAPIURL)
-}
-
-// SetPdnsAPIKey sets the "pdns_api_key" field.
-func (m *SettingMutation) SetPdnsAPIKey(s string) {
-	m.pdns_api_key = &s
-}
-
-// PdnsAPIKey returns the value of the "pdns_api_key" field in the mutation.
-func (m *SettingMutation) PdnsAPIKey() (r string, exists bool) {
-	v := m.pdns_api_key
+// Value returns the value of the "value" field in the mutation.
+func (m *SettingsMutation) Value() (r string, exists bool) {
+	v := m.value
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldPdnsAPIKey returns the old "pdns_api_key" field's value of the Setting entity.
-// If the Setting object wasn't provided to the builder, the object is fetched from the database.
+// OldValue returns the old "value" field's value of the Settings entity.
+// If the Settings object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SettingMutation) OldPdnsAPIKey(ctx context.Context) (v string, err error) {
+func (m *SettingsMutation) OldValue(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPdnsAPIKey is only allowed on UpdateOne operations")
+		return v, errors.New("OldValue is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPdnsAPIKey requires an ID field in the mutation")
+		return v, errors.New("OldValue requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPdnsAPIKey: %w", err)
+		return v, fmt.Errorf("querying old value for OldValue: %w", err)
 	}
-	return oldValue.PdnsAPIKey, nil
+	return oldValue.Value, nil
 }
 
-// ClearPdnsAPIKey clears the value of the "pdns_api_key" field.
-func (m *SettingMutation) ClearPdnsAPIKey() {
-	m.pdns_api_key = nil
-	m.clearedFields[setting.FieldPdnsAPIKey] = struct{}{}
+// ResetValue resets all changes to the "value" field.
+func (m *SettingsMutation) ResetValue() {
+	m.value = nil
 }
 
-// PdnsAPIKeyCleared returns if the "pdns_api_key" field was cleared in this mutation.
-func (m *SettingMutation) PdnsAPIKeyCleared() bool {
-	_, ok := m.clearedFields[setting.FieldPdnsAPIKey]
-	return ok
-}
-
-// ResetPdnsAPIKey resets all changes to the "pdns_api_key" field.
-func (m *SettingMutation) ResetPdnsAPIKey() {
-	m.pdns_api_key = nil
-	delete(m.clearedFields, setting.FieldPdnsAPIKey)
-}
-
-// Where appends a list predicates to the SettingMutation builder.
-func (m *SettingMutation) Where(ps ...predicate.Setting) {
+// Where appends a list predicates to the SettingsMutation builder.
+func (m *SettingsMutation) Where(ps ...predicate.Settings) {
 	m.predicates = append(m.predicates, ps...)
 }
 
-// WhereP appends storage-level predicates to the SettingMutation builder. Using this method,
+// WhereP appends storage-level predicates to the SettingsMutation builder. Using this method,
 // users can use type-assertion to append predicates that do not depend on any generated package.
-func (m *SettingMutation) WhereP(ps ...func(*sql.Selector)) {
-	p := make([]predicate.Setting, len(ps))
+func (m *SettingsMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Settings, len(ps))
 	for i := range ps {
 		p[i] = ps[i]
 	}
@@ -348,36 +316,36 @@ func (m *SettingMutation) WhereP(ps ...func(*sql.Selector)) {
 }
 
 // Op returns the operation name.
-func (m *SettingMutation) Op() Op {
+func (m *SettingsMutation) Op() Op {
 	return m.op
 }
 
 // SetOp allows setting the mutation operation.
-func (m *SettingMutation) SetOp(op Op) {
+func (m *SettingsMutation) SetOp(op Op) {
 	m.op = op
 }
 
-// Type returns the node type of this mutation (Setting).
-func (m *SettingMutation) Type() string {
+// Type returns the node type of this mutation (Settings).
+func (m *SettingsMutation) Type() string {
 	return m.typ
 }
 
 // Fields returns all fields that were changed during this mutation. Note that in
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
-func (m *SettingMutation) Fields() []string {
+func (m *SettingsMutation) Fields() []string {
 	fields := make([]string, 0, 4)
 	if m.create_time != nil {
-		fields = append(fields, setting.FieldCreateTime)
+		fields = append(fields, settings.FieldCreateTime)
 	}
 	if m.update_time != nil {
-		fields = append(fields, setting.FieldUpdateTime)
+		fields = append(fields, settings.FieldUpdateTime)
 	}
-	if m.pdns_api_url != nil {
-		fields = append(fields, setting.FieldPdnsAPIURL)
+	if m.key != nil {
+		fields = append(fields, settings.FieldKey)
 	}
-	if m.pdns_api_key != nil {
-		fields = append(fields, setting.FieldPdnsAPIKey)
+	if m.value != nil {
+		fields = append(fields, settings.FieldValue)
 	}
 	return fields
 }
@@ -385,16 +353,16 @@ func (m *SettingMutation) Fields() []string {
 // Field returns the value of a field with the given name. The second boolean
 // return value indicates that this field was not set, or was not defined in the
 // schema.
-func (m *SettingMutation) Field(name string) (ent.Value, bool) {
+func (m *SettingsMutation) Field(name string) (ent.Value, bool) {
 	switch name {
-	case setting.FieldCreateTime:
+	case settings.FieldCreateTime:
 		return m.CreateTime()
-	case setting.FieldUpdateTime:
+	case settings.FieldUpdateTime:
 		return m.UpdateTime()
-	case setting.FieldPdnsAPIURL:
-		return m.PdnsAPIURL()
-	case setting.FieldPdnsAPIKey:
-		return m.PdnsAPIKey()
+	case settings.FieldKey:
+		return m.Key()
+	case settings.FieldValue:
+		return m.Value()
 	}
 	return nil, false
 }
@@ -402,185 +370,173 @@ func (m *SettingMutation) Field(name string) (ent.Value, bool) {
 // OldField returns the old value of the field from the database. An error is
 // returned if the mutation operation is not UpdateOne, or the query to the
 // database failed.
-func (m *SettingMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+func (m *SettingsMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
-	case setting.FieldCreateTime:
+	case settings.FieldCreateTime:
 		return m.OldCreateTime(ctx)
-	case setting.FieldUpdateTime:
+	case settings.FieldUpdateTime:
 		return m.OldUpdateTime(ctx)
-	case setting.FieldPdnsAPIURL:
-		return m.OldPdnsAPIURL(ctx)
-	case setting.FieldPdnsAPIKey:
-		return m.OldPdnsAPIKey(ctx)
+	case settings.FieldKey:
+		return m.OldKey(ctx)
+	case settings.FieldValue:
+		return m.OldValue(ctx)
 	}
-	return nil, fmt.Errorf("unknown Setting field %s", name)
+	return nil, fmt.Errorf("unknown Settings field %s", name)
 }
 
 // SetField sets the value of a field with the given name. It returns an error if
 // the field is not defined in the schema, or if the type mismatched the field
 // type.
-func (m *SettingMutation) SetField(name string, value ent.Value) error {
+func (m *SettingsMutation) SetField(name string, value ent.Value) error {
 	switch name {
-	case setting.FieldCreateTime:
+	case settings.FieldCreateTime:
 		v, ok := value.(time.Time)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCreateTime(v)
 		return nil
-	case setting.FieldUpdateTime:
+	case settings.FieldUpdateTime:
 		v, ok := value.(time.Time)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpdateTime(v)
 		return nil
-	case setting.FieldPdnsAPIURL:
+	case settings.FieldKey:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetPdnsAPIURL(v)
+		m.SetKey(v)
 		return nil
-	case setting.FieldPdnsAPIKey:
+	case settings.FieldValue:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetPdnsAPIKey(v)
+		m.SetValue(v)
 		return nil
 	}
-	return fmt.Errorf("unknown Setting field %s", name)
+	return fmt.Errorf("unknown Settings field %s", name)
 }
 
 // AddedFields returns all numeric fields that were incremented/decremented during
 // this mutation.
-func (m *SettingMutation) AddedFields() []string {
+func (m *SettingsMutation) AddedFields() []string {
 	return nil
 }
 
 // AddedField returns the numeric value that was incremented/decremented on a field
 // with the given name. The second boolean return value indicates that this field
 // was not set, or was not defined in the schema.
-func (m *SettingMutation) AddedField(name string) (ent.Value, bool) {
+func (m *SettingsMutation) AddedField(name string) (ent.Value, bool) {
 	return nil, false
 }
 
 // AddField adds the value to the field with the given name. It returns an error if
 // the field is not defined in the schema, or if the type mismatched the field
 // type.
-func (m *SettingMutation) AddField(name string, value ent.Value) error {
+func (m *SettingsMutation) AddField(name string, value ent.Value) error {
 	switch name {
 	}
-	return fmt.Errorf("unknown Setting numeric field %s", name)
+	return fmt.Errorf("unknown Settings numeric field %s", name)
 }
 
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
-func (m *SettingMutation) ClearedFields() []string {
+func (m *SettingsMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(setting.FieldUpdateTime) {
-		fields = append(fields, setting.FieldUpdateTime)
-	}
-	if m.FieldCleared(setting.FieldPdnsAPIURL) {
-		fields = append(fields, setting.FieldPdnsAPIURL)
-	}
-	if m.FieldCleared(setting.FieldPdnsAPIKey) {
-		fields = append(fields, setting.FieldPdnsAPIKey)
+	if m.FieldCleared(settings.FieldUpdateTime) {
+		fields = append(fields, settings.FieldUpdateTime)
 	}
 	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
 // cleared in this mutation.
-func (m *SettingMutation) FieldCleared(name string) bool {
+func (m *SettingsMutation) FieldCleared(name string) bool {
 	_, ok := m.clearedFields[name]
 	return ok
 }
 
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
-func (m *SettingMutation) ClearField(name string) error {
+func (m *SettingsMutation) ClearField(name string) error {
 	switch name {
-	case setting.FieldUpdateTime:
+	case settings.FieldUpdateTime:
 		m.ClearUpdateTime()
 		return nil
-	case setting.FieldPdnsAPIURL:
-		m.ClearPdnsAPIURL()
-		return nil
-	case setting.FieldPdnsAPIKey:
-		m.ClearPdnsAPIKey()
-		return nil
 	}
-	return fmt.Errorf("unknown Setting nullable field %s", name)
+	return fmt.Errorf("unknown Settings nullable field %s", name)
 }
 
 // ResetField resets all changes in the mutation for the field with the given name.
 // It returns an error if the field is not defined in the schema.
-func (m *SettingMutation) ResetField(name string) error {
+func (m *SettingsMutation) ResetField(name string) error {
 	switch name {
-	case setting.FieldCreateTime:
+	case settings.FieldCreateTime:
 		m.ResetCreateTime()
 		return nil
-	case setting.FieldUpdateTime:
+	case settings.FieldUpdateTime:
 		m.ResetUpdateTime()
 		return nil
-	case setting.FieldPdnsAPIURL:
-		m.ResetPdnsAPIURL()
+	case settings.FieldKey:
+		m.ResetKey()
 		return nil
-	case setting.FieldPdnsAPIKey:
-		m.ResetPdnsAPIKey()
+	case settings.FieldValue:
+		m.ResetValue()
 		return nil
 	}
-	return fmt.Errorf("unknown Setting field %s", name)
+	return fmt.Errorf("unknown Settings field %s", name)
 }
 
 // AddedEdges returns all edge names that were set/added in this mutation.
-func (m *SettingMutation) AddedEdges() []string {
+func (m *SettingsMutation) AddedEdges() []string {
 	edges := make([]string, 0, 0)
 	return edges
 }
 
 // AddedIDs returns all IDs (to other nodes) that were added for the given edge
 // name in this mutation.
-func (m *SettingMutation) AddedIDs(name string) []ent.Value {
+func (m *SettingsMutation) AddedIDs(name string) []ent.Value {
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
-func (m *SettingMutation) RemovedEdges() []string {
+func (m *SettingsMutation) RemovedEdges() []string {
 	edges := make([]string, 0, 0)
 	return edges
 }
 
 // RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
 // the given name in this mutation.
-func (m *SettingMutation) RemovedIDs(name string) []ent.Value {
+func (m *SettingsMutation) RemovedIDs(name string) []ent.Value {
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
-func (m *SettingMutation) ClearedEdges() []string {
+func (m *SettingsMutation) ClearedEdges() []string {
 	edges := make([]string, 0, 0)
 	return edges
 }
 
 // EdgeCleared returns a boolean which indicates if the edge with the given name
 // was cleared in this mutation.
-func (m *SettingMutation) EdgeCleared(name string) bool {
+func (m *SettingsMutation) EdgeCleared(name string) bool {
 	return false
 }
 
 // ClearEdge clears the value of the edge with the given name. It returns an error
 // if that edge is not defined in the schema.
-func (m *SettingMutation) ClearEdge(name string) error {
-	return fmt.Errorf("unknown Setting unique edge %s", name)
+func (m *SettingsMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown Settings unique edge %s", name)
 }
 
 // ResetEdge resets all changes to the edge with the given name in this mutation.
 // It returns an error if the edge is not defined in the schema.
-func (m *SettingMutation) ResetEdge(name string) error {
-	return fmt.Errorf("unknown Setting edge %s", name)
+func (m *SettingsMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown Settings edge %s", name)
 }
 
 // UserMutation represents an operation that mutates the User nodes in the graph.

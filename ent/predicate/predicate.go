@@ -6,8 +6,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
-// Setting is the predicate function for setting builders.
-type Setting func(*sql.Selector)
+// Settings is the predicate function for settings builders.
+type Settings func(*sql.Selector)
 
 // User is the predicate function for user builders.
 type User func(*sql.Selector)

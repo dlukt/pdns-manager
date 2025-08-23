@@ -9,11 +9,11 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/dlukt/pdns-manager/ent/setting"
+	"github.com/dlukt/pdns-manager/ent/settings"
 )
 
-// Setting is the model entity for the Setting schema.
-type Setting struct {
+// Settings is the model entity for the Settings schema.
+type Settings struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID int `json:"id,omitempty"`
@@ -21,23 +21,23 @@ type Setting struct {
 	CreateTime time.Time `json:"create_time,omitempty"`
 	// UpdateTime holds the value of the "update_time" field.
 	UpdateTime time.Time `json:"update_time,omitempty"`
-	// PdnsAPIURL holds the value of the "pdns_api_url" field.
-	PdnsAPIURL string `json:"pdns_api_url,omitempty"`
-	// PdnsAPIKey holds the value of the "pdns_api_key" field.
-	PdnsAPIKey   string `json:"pdns_api_key,omitempty"`
+	// Key holds the value of the "key" field.
+	Key string `json:"key,omitempty"`
+	// Value holds the value of the "value" field.
+	Value        string `json:"value,omitempty"`
 	selectValues sql.SelectValues
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
-func (*Setting) scanValues(columns []string) ([]any, error) {
+func (*Settings) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case setting.FieldID:
+		case settings.FieldID:
 			values[i] = new(sql.NullInt64)
-		case setting.FieldPdnsAPIURL, setting.FieldPdnsAPIKey:
+		case settings.FieldKey, settings.FieldValue:
 			values[i] = new(sql.NullString)
-		case setting.FieldCreateTime, setting.FieldUpdateTime:
+		case settings.FieldCreateTime, settings.FieldUpdateTime:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -47,42 +47,42 @@ func (*Setting) scanValues(columns []string) ([]any, error) {
 }
 
 // assignValues assigns the values that were returned from sql.Rows (after scanning)
-// to the Setting fields.
-func (_m *Setting) assignValues(columns []string, values []any) error {
+// to the Settings fields.
+func (_m *Settings) assignValues(columns []string, values []any) error {
 	if m, n := len(values), len(columns); m < n {
 		return fmt.Errorf("mismatch number of scan values: %d != %d", m, n)
 	}
 	for i := range columns {
 		switch columns[i] {
-		case setting.FieldID:
+		case settings.FieldID:
 			value, ok := values[i].(*sql.NullInt64)
 			if !ok {
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
 			_m.ID = int(value.Int64)
-		case setting.FieldCreateTime:
+		case settings.FieldCreateTime:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field create_time", values[i])
 			} else if value.Valid {
 				_m.CreateTime = value.Time
 			}
-		case setting.FieldUpdateTime:
+		case settings.FieldUpdateTime:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field update_time", values[i])
 			} else if value.Valid {
 				_m.UpdateTime = value.Time
 			}
-		case setting.FieldPdnsAPIURL:
+		case settings.FieldKey:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field pdns_api_url", values[i])
+				return fmt.Errorf("unexpected type %T for field key", values[i])
 			} else if value.Valid {
-				_m.PdnsAPIURL = value.String
+				_m.Key = value.String
 			}
-		case setting.FieldPdnsAPIKey:
+		case settings.FieldValue:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field pdns_api_key", values[i])
+				return fmt.Errorf("unexpected type %T for field value", values[i])
 			} else if value.Valid {
-				_m.PdnsAPIKey = value.String
+				_m.Value = value.String
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -91,34 +91,34 @@ func (_m *Setting) assignValues(columns []string, values []any) error {
 	return nil
 }
 
-// Value returns the ent.Value that was dynamically selected and assigned to the Setting.
+// GetValue returns the ent.Value that was dynamically selected and assigned to the Settings.
 // This includes values selected through modifiers, order, etc.
-func (_m *Setting) Value(name string) (ent.Value, error) {
+func (_m *Settings) GetValue(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
 }
 
-// Update returns a builder for updating this Setting.
-// Note that you need to call Setting.Unwrap() before calling this method if this Setting
+// Update returns a builder for updating this Settings.
+// Note that you need to call Settings.Unwrap() before calling this method if this Settings
 // was returned from a transaction, and the transaction was committed or rolled back.
-func (_m *Setting) Update() *SettingUpdateOne {
-	return NewSettingClient(_m.config).UpdateOne(_m)
+func (_m *Settings) Update() *SettingsUpdateOne {
+	return NewSettingsClient(_m.config).UpdateOne(_m)
 }
 
-// Unwrap unwraps the Setting entity that was returned from a transaction after it was closed,
+// Unwrap unwraps the Settings entity that was returned from a transaction after it was closed,
 // so that all future queries will be executed through the driver which created the transaction.
-func (_m *Setting) Unwrap() *Setting {
+func (_m *Settings) Unwrap() *Settings {
 	_tx, ok := _m.config.driver.(*txDriver)
 	if !ok {
-		panic("ent: Setting is not a transactional entity")
+		panic("ent: Settings is not a transactional entity")
 	}
 	_m.config.driver = _tx.drv
 	return _m
 }
 
 // String implements the fmt.Stringer.
-func (_m *Setting) String() string {
+func (_m *Settings) String() string {
 	var builder strings.Builder
-	builder.WriteString("Setting(")
+	builder.WriteString("Settings(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("create_time=")
 	builder.WriteString(_m.CreateTime.Format(time.ANSIC))
@@ -126,14 +126,14 @@ func (_m *Setting) String() string {
 	builder.WriteString("update_time=")
 	builder.WriteString(_m.UpdateTime.Format(time.ANSIC))
 	builder.WriteString(", ")
-	builder.WriteString("pdns_api_url=")
-	builder.WriteString(_m.PdnsAPIURL)
+	builder.WriteString("key=")
+	builder.WriteString(_m.Key)
 	builder.WriteString(", ")
-	builder.WriteString("pdns_api_key=")
-	builder.WriteString(_m.PdnsAPIKey)
+	builder.WriteString("value=")
+	builder.WriteString(_m.Value)
 	builder.WriteByte(')')
 	return builder.String()
 }
 
-// Settings is a parsable slice of Setting.
-type Settings []*Setting
+// SettingsSlice is a parsable slice of Settings.
+type SettingsSlice []*Settings

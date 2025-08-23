@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/dlukt/pdns-manager/ent/schema"
-	"github.com/dlukt/pdns-manager/ent/setting"
+	"github.com/dlukt/pdns-manager/ent/settings"
 	"github.com/dlukt/pdns-manager/ent/user"
 )
 
@@ -14,22 +14,18 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
-	settingFields := schema.Setting{}.Fields()
-	_ = settingFields
-	// settingDescCreateTime is the schema descriptor for create_time field.
-	settingDescCreateTime := settingFields[1].Descriptor()
-	// setting.DefaultCreateTime holds the default value on creation for the create_time field.
-	setting.DefaultCreateTime = settingDescCreateTime.Default.(func() time.Time)
-	// settingDescUpdateTime is the schema descriptor for update_time field.
-	settingDescUpdateTime := settingFields[2].Descriptor()
-	// setting.DefaultUpdateTime holds the default value on creation for the update_time field.
-	setting.DefaultUpdateTime = settingDescUpdateTime.Default.(func() time.Time)
-	// setting.UpdateDefaultUpdateTime holds the default value on update for the update_time field.
-	setting.UpdateDefaultUpdateTime = settingDescUpdateTime.UpdateDefault.(func() time.Time)
-	// settingDescID is the schema descriptor for id field.
-	settingDescID := settingFields[0].Descriptor()
-	// setting.DefaultID holds the default value on creation for the id field.
-	setting.DefaultID = settingDescID.Default.(int)
+	settingsFields := schema.Settings{}.Fields()
+	_ = settingsFields
+	// settingsDescCreateTime is the schema descriptor for create_time field.
+	settingsDescCreateTime := settingsFields[0].Descriptor()
+	// settings.DefaultCreateTime holds the default value on creation for the create_time field.
+	settings.DefaultCreateTime = settingsDescCreateTime.Default.(func() time.Time)
+	// settingsDescUpdateTime is the schema descriptor for update_time field.
+	settingsDescUpdateTime := settingsFields[1].Descriptor()
+	// settings.DefaultUpdateTime holds the default value on creation for the update_time field.
+	settings.DefaultUpdateTime = settingsDescUpdateTime.Default.(func() time.Time)
+	// settings.UpdateDefaultUpdateTime holds the default value on update for the update_time field.
+	settings.UpdateDefaultUpdateTime = settingsDescUpdateTime.UpdateDefault.(func() time.Time)
 	userFields := schema.User{}.Fields()
 	_ = userFields
 	// userDescCreateTime is the schema descriptor for create_time field.
