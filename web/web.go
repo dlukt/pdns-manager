@@ -75,10 +75,10 @@ func NewHandler(a *auth.Service, s *session.Store) http.Handler {
 
 func (h *handler) loginRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-    if strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/static/") {
-        next.ServeHTTP(w, r)
-        return
-    }
+		if strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/static/") {
+			next.ServeHTTP(w, r)
+			return
+		}
 		c, err := r.Cookie("session")
 		if err != nil {
 			http.Redirect(w, r, "/auth/login", http.StatusFound)
@@ -145,18 +145,21 @@ func (h *handler) postLogin(w http.ResponseWriter, r *http.Request) {
 	data := struct{ Title, Error, Message string }{Title: "Login"}
 	if err != nil {
 		data.Error = err.Error()
-	} else {
-		token, e := h.sessions.Create(u.ID)
-		if e != nil {
-			data.Error = e.Error()
-		} else {
-			http.SetCookie(w, &http.Cookie{Name: "session", Value: token, Path: "/", HttpOnly: true})
-			data.Message = "Login successful"
+		if err := tmpl.ExecuteTemplate(w, "auth/login.html", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+		return
 	}
-	if err := tmpl.ExecuteTemplate(w, "auth/login.html", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	token, err := h.sessions.Create(u.ID)
+	if err != nil {
+		data.Error = err.Error()
+		if err := tmpl.ExecuteTemplate(w, "auth/login.html", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
 	}
+	http.SetCookie(w, &http.Cookie{Name: "session", Value: token, Path: "/", HttpOnly: true})
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func (h *handler) getReset(w http.ResponseWriter, r *http.Request) {
@@ -177,12 +180,12 @@ func (h *handler) postReset(w http.ResponseWriter, r *http.Request) {
 	err := h.auth.ResetPassword(r.Context(), token, r.FormValue("password"))
 	if err != nil {
 		data.Error = err.Error()
-	} else {
-		data.Message = "Password reset successful"
+		if err := tmpl.ExecuteTemplate(w, "auth/reset.html", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
 	}
-	if err := tmpl.ExecuteTemplate(w, "auth/reset.html", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func (h *handler) getForgot(w http.ResponseWriter, r *http.Request) {
