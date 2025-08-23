@@ -268,8 +268,8 @@ func (h *handler) confirmMail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) getServerSettings(w http.ResponseWriter, r *http.Request) {
-	urlSetting := h.client.Settings.Query().Where(settings.KeyEQ("pdns_api_url")).OnlyX(r.Context())
-	keySetting := h.client.Settings.Query().Where(settings.KeyEQ("pdns_api_key")).OnlyX(r.Context())
+	urlSetting, _ := h.client.Settings.Query().Where(settings.KeyEQ("pdns_api_url")).Only(r.Context())
+	keySetting, _ := h.client.Settings.Query().Where(settings.KeyEQ("pdns_api_key")).Only(r.Context())
 	data := struct {
 		Title      string
 		PDNSAPIURL string
