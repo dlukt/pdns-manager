@@ -5,8 +5,8 @@ go 1.24.6
 require (
 	ariga.io/atlas v0.32.1-0.20250325101103-175b25e1c1b9
 	entgo.io/ent v0.14.5
-	github.com/google/uuid v1.3.0
 	github.com/jackc/pgx/v5 v5.7.5
+	github.com/rs/xid v1.6.0
 	github.com/spf13/cobra v1.9.1
 	golang.org/x/crypto v0.37.0
 )
@@ -17,6 +17,7 @@ require (
 	github.com/bmatcuk/doublestar v1.3.4 // indirect
 	github.com/go-openapi/inflect v0.19.0 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.18.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
