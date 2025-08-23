@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -27,6 +28,18 @@ func (_u *UserUpdate) Where(ps ...predicate.User) *UserUpdate {
 	return _u
 }
 
+// SetUpdateTime sets the "update_time" field.
+func (_u *UserUpdate) SetUpdateTime(v time.Time) *UserUpdate {
+	_u.mutation.SetUpdateTime(v)
+	return _u
+}
+
+// ClearUpdateTime clears the value of the "update_time" field.
+func (_u *UserUpdate) ClearUpdateTime() *UserUpdate {
+	_u.mutation.ClearUpdateTime()
+	return _u
+}
+
 // SetFirstName sets the "first_name" field.
 func (_u *UserUpdate) SetFirstName(v string) *UserUpdate {
 	_u.mutation.SetFirstName(v)
@@ -41,6 +54,12 @@ func (_u *UserUpdate) SetNillableFirstName(v *string) *UserUpdate {
 	return _u
 }
 
+// ClearFirstName clears the value of the "first_name" field.
+func (_u *UserUpdate) ClearFirstName() *UserUpdate {
+	_u.mutation.ClearFirstName()
+	return _u
+}
+
 // SetLastName sets the "last_name" field.
 func (_u *UserUpdate) SetLastName(v string) *UserUpdate {
 	_u.mutation.SetLastName(v)
@@ -52,6 +71,12 @@ func (_u *UserUpdate) SetNillableLastName(v *string) *UserUpdate {
 	if v != nil {
 		_u.SetLastName(*v)
 	}
+	return _u
+}
+
+// ClearLastName clears the value of the "last_name" field.
+func (_u *UserUpdate) ClearLastName() *UserUpdate {
+	_u.mutation.ClearLastName()
 	return _u
 }
 
@@ -70,16 +95,8 @@ func (_u *UserUpdate) SetNillableEmail(v *string) *UserUpdate {
 }
 
 // SetPasswordHash sets the "password_hash" field.
-func (_u *UserUpdate) SetPasswordHash(v string) *UserUpdate {
+func (_u *UserUpdate) SetPasswordHash(v []byte) *UserUpdate {
 	_u.mutation.SetPasswordHash(v)
-	return _u
-}
-
-// SetNillablePasswordHash sets the "password_hash" field if the given value is not nil.
-func (_u *UserUpdate) SetNillablePasswordHash(v *string) *UserUpdate {
-	if v != nil {
-		_u.SetPasswordHash(*v)
-	}
 	return _u
 }
 
@@ -144,6 +161,7 @@ func (_u *UserUpdate) Mutation() *UserMutation {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (_u *UserUpdate) Save(ctx context.Context) (int, error) {
+	_u.defaults()
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
@@ -169,6 +187,14 @@ func (_u *UserUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// defaults sets the default values of the builder before save.
+func (_u *UserUpdate) defaults() {
+	if _, ok := _u.mutation.UpdateTime(); !ok && !_u.mutation.UpdateTimeCleared() {
+		v := user.UpdateDefaultUpdateTime()
+		_u.mutation.SetUpdateTime(v)
+	}
+}
+
 func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	_spec := sqlgraph.NewUpdateSpec(user.Table, user.Columns, sqlgraph.NewFieldSpec(user.FieldID, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
@@ -178,17 +204,29 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			}
 		}
 	}
+	if value, ok := _u.mutation.UpdateTime(); ok {
+		_spec.SetField(user.FieldUpdateTime, field.TypeTime, value)
+	}
+	if _u.mutation.UpdateTimeCleared() {
+		_spec.ClearField(user.FieldUpdateTime, field.TypeTime)
+	}
 	if value, ok := _u.mutation.FirstName(); ok {
 		_spec.SetField(user.FieldFirstName, field.TypeString, value)
 	}
+	if _u.mutation.FirstNameCleared() {
+		_spec.ClearField(user.FieldFirstName, field.TypeString)
+	}
 	if value, ok := _u.mutation.LastName(); ok {
 		_spec.SetField(user.FieldLastName, field.TypeString, value)
+	}
+	if _u.mutation.LastNameCleared() {
+		_spec.ClearField(user.FieldLastName, field.TypeString)
 	}
 	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.PasswordHash(); ok {
-		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
+		_spec.SetField(user.FieldPasswordHash, field.TypeBytes, value)
 	}
 	if value, ok := _u.mutation.EmailVerified(); ok {
 		_spec.SetField(user.FieldEmailVerified, field.TypeBool, value)
@@ -225,6 +263,18 @@ type UserUpdateOne struct {
 	mutation *UserMutation
 }
 
+// SetUpdateTime sets the "update_time" field.
+func (_u *UserUpdateOne) SetUpdateTime(v time.Time) *UserUpdateOne {
+	_u.mutation.SetUpdateTime(v)
+	return _u
+}
+
+// ClearUpdateTime clears the value of the "update_time" field.
+func (_u *UserUpdateOne) ClearUpdateTime() *UserUpdateOne {
+	_u.mutation.ClearUpdateTime()
+	return _u
+}
+
 // SetFirstName sets the "first_name" field.
 func (_u *UserUpdateOne) SetFirstName(v string) *UserUpdateOne {
 	_u.mutation.SetFirstName(v)
@@ -239,6 +289,12 @@ func (_u *UserUpdateOne) SetNillableFirstName(v *string) *UserUpdateOne {
 	return _u
 }
 
+// ClearFirstName clears the value of the "first_name" field.
+func (_u *UserUpdateOne) ClearFirstName() *UserUpdateOne {
+	_u.mutation.ClearFirstName()
+	return _u
+}
+
 // SetLastName sets the "last_name" field.
 func (_u *UserUpdateOne) SetLastName(v string) *UserUpdateOne {
 	_u.mutation.SetLastName(v)
@@ -250,6 +306,12 @@ func (_u *UserUpdateOne) SetNillableLastName(v *string) *UserUpdateOne {
 	if v != nil {
 		_u.SetLastName(*v)
 	}
+	return _u
+}
+
+// ClearLastName clears the value of the "last_name" field.
+func (_u *UserUpdateOne) ClearLastName() *UserUpdateOne {
+	_u.mutation.ClearLastName()
 	return _u
 }
 
@@ -268,16 +330,8 @@ func (_u *UserUpdateOne) SetNillableEmail(v *string) *UserUpdateOne {
 }
 
 // SetPasswordHash sets the "password_hash" field.
-func (_u *UserUpdateOne) SetPasswordHash(v string) *UserUpdateOne {
+func (_u *UserUpdateOne) SetPasswordHash(v []byte) *UserUpdateOne {
 	_u.mutation.SetPasswordHash(v)
-	return _u
-}
-
-// SetNillablePasswordHash sets the "password_hash" field if the given value is not nil.
-func (_u *UserUpdateOne) SetNillablePasswordHash(v *string) *UserUpdateOne {
-	if v != nil {
-		_u.SetPasswordHash(*v)
-	}
 	return _u
 }
 
@@ -355,6 +409,7 @@ func (_u *UserUpdateOne) Select(field string, fields ...string) *UserUpdateOne {
 
 // Save executes the query and returns the updated User entity.
 func (_u *UserUpdateOne) Save(ctx context.Context) (*User, error) {
+	_u.defaults()
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
@@ -377,6 +432,14 @@ func (_u *UserUpdateOne) Exec(ctx context.Context) error {
 func (_u *UserUpdateOne) ExecX(ctx context.Context) {
 	if err := _u.Exec(ctx); err != nil {
 		panic(err)
+	}
+}
+
+// defaults sets the default values of the builder before save.
+func (_u *UserUpdateOne) defaults() {
+	if _, ok := _u.mutation.UpdateTime(); !ok && !_u.mutation.UpdateTimeCleared() {
+		v := user.UpdateDefaultUpdateTime()
+		_u.mutation.SetUpdateTime(v)
 	}
 }
 
@@ -406,17 +469,29 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			}
 		}
 	}
+	if value, ok := _u.mutation.UpdateTime(); ok {
+		_spec.SetField(user.FieldUpdateTime, field.TypeTime, value)
+	}
+	if _u.mutation.UpdateTimeCleared() {
+		_spec.ClearField(user.FieldUpdateTime, field.TypeTime)
+	}
 	if value, ok := _u.mutation.FirstName(); ok {
 		_spec.SetField(user.FieldFirstName, field.TypeString, value)
 	}
+	if _u.mutation.FirstNameCleared() {
+		_spec.ClearField(user.FieldFirstName, field.TypeString)
+	}
 	if value, ok := _u.mutation.LastName(); ok {
 		_spec.SetField(user.FieldLastName, field.TypeString, value)
+	}
+	if _u.mutation.LastNameCleared() {
+		_spec.ClearField(user.FieldLastName, field.TypeString)
 	}
 	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.PasswordHash(); ok {
-		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
+		_spec.SetField(user.FieldPasswordHash, field.TypeBytes, value)
 	}
 	if value, ok := _u.mutation.EmailVerified(); ok {
 		_spec.SetField(user.FieldEmailVerified, field.TypeBool, value)

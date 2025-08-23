@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
 	"github.com/rs/xid"
@@ -18,10 +20,12 @@ func (User) Fields() []ent.Field {
 			DefaultFunc(func() string { return xid.New().String() }).
 			Unique().
 			Immutable(),
-		field.String("first_name"),
-		field.String("last_name"),
+		field.Time("create_time").Default(time.Now).Immutable(),
+		field.Time("update_time").Default(time.Now).UpdateDefault(time.Now).Optional(),
+		field.String("first_name").Optional(),
+		field.String("last_name").Optional(),
 		field.String("email").Unique(),
-		field.String("password_hash"),
+		field.Bytes("password_hash"),
 		field.Bool("email_verified").Default(false),
 		field.String("verification_token").Optional().Nillable(),
 		field.String("reset_token").Optional().Nillable(),

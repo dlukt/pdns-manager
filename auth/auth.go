@@ -40,7 +40,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*ent.User, st
 		SetFirstName(in.FirstName).
 		SetLastName(in.LastName).
 		SetEmail(in.Email).
-		SetPasswordHash(string(hash)).
+		SetPasswordHash(hash).
 		SetVerificationToken(token).
 		Save(ctx)
 	if err != nil {
@@ -100,7 +100,7 @@ func (s *Service) ChangePassword(ctx context.Context, id string, oldPassword, ne
 	if err != nil {
 		return err
 	}
-	return s.client.User.UpdateOneID(id).SetPasswordHash(string(hash)).Exec(ctx)
+	return s.client.User.UpdateOneID(id).SetPasswordHash(hash).Exec(ctx)
 }
 
 // ChangeEmail updates the user's email and returns a new verification token.
@@ -153,7 +153,7 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 		return err
 	}
 	return s.client.User.UpdateOne(u).
-		SetPasswordHash(string(hash)).
+		SetPasswordHash(hash).
 		ClearResetToken().
 		Exec(ctx)
 }
