@@ -1,13 +1,18 @@
 {{define "base"}}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}}</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script>
+        if (localStorage.theme === 'light') {
+            document.documentElement.classList.remove('dark')
+        }
+    </script>
 </head>
-<body class="h-screen flex">
+<body class="h-screen flex bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
     {{block "body" .}}{{end}}
 </body>
 </html>
