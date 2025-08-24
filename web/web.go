@@ -316,21 +316,19 @@ func (h *handler) postServerSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if _, err := h.client.Settings.Update().Where(settings.KeyEQ("pdns_api_url")).SetValue(pdnsURL).Save(r.Context()); err != nil {
-		if !ent.IsNotFound(err) {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+	if n, err := h.client.Settings.Update().Where(settings.KeyEQ("pdns_api_url")).SetValue(pdnsURL).Save(r.Context()); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	} else if n == 0 {
 		if _, err := h.client.Settings.Create().SetKey("pdns_api_url").SetValue(pdnsURL).Save(r.Context()); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
-	if _, err := h.client.Settings.Update().Where(settings.KeyEQ("pdns_api_key")).SetValue(pdnsKey).Save(r.Context()); err != nil {
-		if !ent.IsNotFound(err) {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+	if n, err := h.client.Settings.Update().Where(settings.KeyEQ("pdns_api_key")).SetValue(pdnsKey).Save(r.Context()); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	} else if n == 0 {
 		if _, err := h.client.Settings.Create().SetKey("pdns_api_key").SetValue(pdnsKey).Save(r.Context()); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
