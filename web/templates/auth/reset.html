@@ -17,8 +17,8 @@
     {{if .Error}}<p class="mb-4 text-red-500">{{.Error}}</p>{{end}}
     {{if .Message}}<p class="mb-4 text-green-500">{{.Message}}</p>{{end}}
     <form method="post" class="space-y-4">
-        <input class="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700" type="text" name="token" placeholder="Reset Token" value="{{.Token}}">
-        <input class="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700" type="password" name="password" placeholder="New Password">
+        <input class="w-full px-3 py-2 border rounded bg-white dark:bg-gray-800 dark:text-white" type="text" name="token" placeholder="Reset Token" value="{{.Token}}">
+        <input class="w-full px-3 py-2 border rounded bg-white dark:bg-gray-800 dark:text-white" type="password" name="password" placeholder="New Password">
         <button class="w-full bg-blue-500 text-white py-2 rounded" type="submit">Reset Password</button>
     </form>
 </div>
