@@ -8,11 +8,11 @@
 <form method="POST" action="/settings/server" class="space-y-4 max-w-md">
     <div>
         <label class="block mb-1" for="pdns_api_url">PowerDNS API URL</label>
-        <input id="pdns_api_url" name="pdns_api_url" type="text" value="{{.PDNSAPIURL}}" class="w-full p-2 border rounded bg-white dark:bg-gray-700" required>
+        <input id="pdns_api_url" name="pdns_api_url" type="text" value="{{.PDNSAPIURL}}" class="w-full p-2 border rounded bg-white dark:bg-gray-800 dark:text-white" required>
     </div>
     <div>
         <label class="block mb-1" for="pdns_api_key">PowerDNS API Key</label>
-        <input id="pdns_api_key" name="pdns_api_key" type="text" value="{{.PDNSAPIKey}}" class="w-full p-2 border rounded bg-white dark:bg-gray-700" required>
+        <input id="pdns_api_key" name="pdns_api_key" type="text" value="{{.PDNSAPIKey}}" class="w-full p-2 border rounded bg-white dark:bg-gray-800 dark:text-white" required>
     </div>
     <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Save</button>
 </form>
