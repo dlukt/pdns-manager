@@ -72,19 +72,12 @@ var startCmd = &cobra.Command{
 
 		client := openDatabaseConnection(dsn)
 		defer client.Close()
-		if e := client.Schema.Create(context.Background()); e != nil {
+		ctx := context.Background()
+		if e := client.Schema.Create(ctx); e != nil {
 			log.Fatalf("failed creating schema: %v", e)
 		}
-		if pdnsURL == "" {
-			if s, err := client.Settings.Query().Where(settings.KeyEQ("pdns_api_url")).Only(context.Background()); err == nil {
-				pdnsURL = s.Value
-			}
-		}
-		if pdnsKey == "" {
-			if s, err := client.Settings.Query().Where(settings.KeyEQ("pdns_api_key")).Only(context.Background()); err == nil {
-				pdnsKey = s.Value
-			}
-		}
+		pdnsURL = ensureSetting(ctx, client, "pdns_api_url", pdnsURL)
+		pdnsKey = ensureSetting(ctx, client, "pdns_api_key", pdnsKey)
 		config.PDNSAPIURL = pdnsURL
 		config.PDNSAPIKey = pdnsKey
 		key := make([]byte, 32)
@@ -113,6 +106,33 @@ func init() {
 	startCmd.Flags().StringVar(&config.PDNSAPIURL, "pdns-api-url", "", "PowerDNS API URL")
 	startCmd.Flags().StringVar(&config.PDNSAPIKey, "pdns-api-key", "", "PowerDNS API Key")
 	rootCmd.AddCommand(startCmd)
+}
+
+// ensureSetting ensures that a settings entry with the given key exists. If
+// value is empty it reads the existing value from the database. Otherwise it
+// stores the provided value.
+func ensureSetting(ctx context.Context, client *ent.Client, key, value string) string {
+	s, err := client.Settings.Query().Where(settings.KeyEQ(key)).Only(ctx)
+	switch {
+	case err == nil:
+		if value == "" {
+			return s.Value
+		}
+		if s.Value != value {
+			if _, err := client.Settings.UpdateOneID(s.ID).SetValue(value).Save(ctx); err != nil {
+				log.Fatalf("failed updating %s: %v", key, err)
+			}
+		}
+		return value
+	case ent.IsNotFound(err):
+		if _, err := client.Settings.Create().SetKey(key).SetValue(value).Save(ctx); err != nil {
+			log.Fatalf("failed creating %s: %v", key, err)
+		}
+		return value
+	default:
+		log.Fatalf("failed querying %s: %v", key, err)
+	}
+	return value
 }
 
 // Open new connection
