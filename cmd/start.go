@@ -18,6 +18,7 @@ import (
 	"github.com/dlukt/pdns-manager/config"
 	"github.com/dlukt/pdns-manager/ent"
 	"github.com/dlukt/pdns-manager/ent/settings"
+	"github.com/dlukt/pdns-manager/pdns"
 	"github.com/dlukt/pdns-manager/session"
 	"github.com/dlukt/pdns-manager/web"
 	"github.com/spf13/cobra"
@@ -78,6 +79,10 @@ var startCmd = &cobra.Command{
 		}
 		pdnsURL = ensureSetting(ctx, client, "pdns_api_url", pdnsURL)
 		pdnsKey = ensureSetting(ctx, client, "pdns_api_key", pdnsKey)
+		pdnsClient, err := pdns.NewClient(pdnsURL, pdnsKey, nil)
+		if err != nil {
+			log.Fatalf("failed creating PDNS client: %v", err)
+		}
 		config.PDNSAPIURL = pdnsURL
 		config.PDNSAPIKey = pdnsKey
 		key := make([]byte, 32)
@@ -90,7 +95,7 @@ var startCmd = &cobra.Command{
 			mailer = auth.NewSMTPMailer(smtpAddr, smtpUser, smtpPass, mailFrom)
 		}
 		sessions := session.NewStore(key)
-		mux := web.NewHandler(client, auth.NewService(client, mailer), sessions)
+		mux := web.NewHandler(client, auth.NewService(client, mailer), sessions, pdnsClient)
 		fmt.Println("listening on :8080")
 		if err := http.ListenAndServe(":8080", mux); err != nil && err != http.ErrServerClosed {
 			fmt.Println("server error:", err)
