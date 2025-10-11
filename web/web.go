@@ -1,7 +1,9 @@
 package web
 
 import (
+	"context"
 	"embed"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
@@ -12,10 +14,11 @@ import (
 	"github.com/dlukt/pdns-manager/config"
 	"github.com/dlukt/pdns-manager/ent"
 	"github.com/dlukt/pdns-manager/ent/settings"
+	"github.com/dlukt/pdns-manager/pdns"
 	"github.com/dlukt/pdns-manager/session"
 )
 
-//go:embed templates/*.html templates/auth/*.html templates/settings/*.html static/*
+//go:embed templates/*.html templates/auth/*.html templates/settings/*.html templates/zones/*.html static/*
 var contentFS embed.FS
 
 var (
@@ -78,17 +81,24 @@ func mustTemplates() map[string]*template.Template {
 	return tmpls
 }
 
+type pdnsClient interface {
+	ListServers(ctx context.Context) ([]pdns.Server, error)
+	ListZones(ctx context.Context, serverID string) ([]pdns.Zone, error)
+}
+
 type handler struct {
-	auth     *auth.Service
-	sessions *session.Store
-	client   *ent.Client
+	auth       *auth.Service
+	sessions   *session.Store
+	client     *ent.Client
+	pdnsClient pdnsClient
 }
 
 // NewHandler returns an http.Handler with application routes.
-func NewHandler(c *ent.Client, a *auth.Service, s *session.Store) http.Handler {
-	h := &handler{auth: a, sessions: s, client: c}
+func NewHandler(c *ent.Client, a *auth.Service, s *session.Store, p pdnsClient) http.Handler {
+	h := &handler{auth: a, sessions: s, client: c, pdnsClient: p}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", h.index)
+	mux.HandleFunc("GET /zones", h.listZones)
 	mux.HandleFunc("GET /auth/register", h.getRegister)
 	mux.HandleFunc("POST /auth/register", h.postRegister)
 	mux.HandleFunc("GET /auth/login", h.getLogin)
@@ -125,8 +135,69 @@ func (h *handler) loginRequired(next http.Handler) http.Handler {
 }
 
 func (h *handler) index(w http.ResponseWriter, r *http.Request) {
+	if h.pdnsClient != nil {
+		http.Redirect(w, r, "/zones", http.StatusFound)
+		return
+	}
 	data := struct{ Title string }{Title: "PDNS Manager"}
 	if err := tmpl["index.html"].Execute(w, data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+type zonesIndexView struct {
+	Title            string
+	Servers          []pdns.Server
+	SelectedServerID string
+	Zones            []pdns.Zone
+}
+
+func (h *handler) listZones(w http.ResponseWriter, r *http.Request) {
+	if h.pdnsClient == nil {
+		http.Error(w, "PowerDNS client not configured", http.StatusServiceUnavailable)
+		return
+	}
+	ctx := r.Context()
+	servers, err := h.pdnsClient.ListServers(ctx)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to load servers: %v", err), http.StatusBadGateway)
+		return
+	}
+	if len(servers) == 0 {
+		data := zonesIndexView{Title: "Zones", Servers: servers}
+		if err := tmpl["zones/index.html"].Execute(w, data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	selected := r.URL.Query().Get("server")
+	if selected == "" {
+		selected = servers[0].ID
+	} else {
+		found := false
+		for _, s := range servers {
+			if s.ID == selected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			http.NotFound(w, r)
+			return
+		}
+	}
+	zones, err := h.pdnsClient.ListZones(ctx, selected)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to load zones: %v", err), http.StatusBadGateway)
+		return
+	}
+	data := zonesIndexView{
+		Title:            "Zones",
+		Servers:          servers,
+		SelectedServerID: selected,
+		Zones:            zones,
+	}
+	if err := tmpl["zones/index.html"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
