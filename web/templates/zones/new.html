@@ -1,0 +1,57 @@
+{{define "zones/new.html"}}
+{{template "layout" .}}
+{{end}}
+
+{{define "content"}}
+<h1 class="text-2xl font-bold mb-4">Create Zone</h1>
+<p class="mb-6 text-gray-600 dark:text-gray-300">Provision a new authoritative zone on a configured PowerDNS server.</p>
+{{if .Error}}
+<div class="mb-4 rounded border border-red-300 bg-red-50 p-3 text-red-700 dark:border-red-700 dark:bg-red-900/20 dark:text-red-200">
+    {{.Error}}
+</div>
+{{end}}
+<form method="POST" action="/zones" class="space-y-6 max-w-2xl">
+    <div>
+        <label class="block mb-1 font-medium" for="server_id">Server</label>
+        <select id="server_id" name="server_id" class="w-full rounded border border-gray-300 bg-white p-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white" required>
+            <option value="">Select a server</option>
+            {{range .Servers}}
+            <option value="{{.ID}}" {{if eq $.Form.ServerID .ID}}selected{{end}}>{{.ID}}</option>
+            {{end}}
+        </select>
+        {{with index .FieldErrors "server_id"}}
+        <p class="mt-1 text-sm text-red-600 dark:text-red-300">{{.}}</p>
+        {{end}}
+    </div>
+    <div>
+        <label class="block mb-1 font-medium" for="name">Zone Name</label>
+        <input id="name" name="name" type="text" value="{{.Form.Name}}" class="w-full rounded border border-gray-300 bg-white p-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white" placeholder="example.org." required>
+        {{with index .FieldErrors "name"}}
+        <p class="mt-1 text-sm text-red-600 dark:text-red-300">{{.}}</p>
+        {{end}}
+    </div>
+    <div>
+        <label class="block mb-1 font-medium" for="kind">Kind</label>
+        <select id="kind" name="kind" class="w-full rounded border border-gray-300 bg-white p-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+            {{range .Kinds}}
+            <option value="{{.}}" {{if eq $.Form.Kind .}}selected{{end}}>{{.}}</option>
+            {{end}}
+        </select>
+        {{with index .FieldErrors "kind"}}
+        <p class="mt-1 text-sm text-red-600 dark:text-red-300">{{.}}</p>
+        {{end}}
+    </div>
+    <div>
+        <label class="block mb-1 font-medium" for="masters">Masters (optional)</label>
+        <textarea id="masters" name="masters" rows="3" class="w-full rounded border border-gray-300 bg-white p-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white" placeholder="One IP per line or comma separated">{{.Form.Masters}}</textarea>
+        {{with index .FieldErrors "masters"}}
+        <p class="mt-1 text-sm text-red-600 dark:text-red-300">{{.}}</p>
+        {{end}}
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Required for slave zones. Accepts comma or newline separated values.</p>
+    </div>
+    <div class="flex items-center gap-3">
+        <button type="submit" class="rounded bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700">Create Zone</button>
+        <a href="/zones" class="text-sm text-gray-600 hover:underline dark:text-gray-300">Cancel</a>
+    </div>
+</form>
+{{end}}

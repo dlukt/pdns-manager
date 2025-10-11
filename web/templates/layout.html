@@ -33,14 +33,14 @@
                 <span class="text-xl">📋</span>
                 <span class="sidebar-text ml-3">Dashboard</span>
             </a>
-            <a href="#" class="flex items-center p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700">
+            <a href="/zones/new" class="flex items-center p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700">
                 <span class="text-xl">➕</span>
                 <span class="sidebar-text ml-3">Create Zone</span>
             </a>
-            <a href="#" class="flex items-center p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700">
+            <button id="sidebar-remove-zone" type="button" class="flex w-full items-center p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700">
                 <span class="text-xl">🗑️</span>
                 <span class="sidebar-text ml-3">Remove Zone</span>
-            </a>
+            </button>
         </div>
         <div class="mt-6">
             <h2 class="sidebar-text text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Administration</h2>
@@ -103,6 +103,7 @@
             </div>
         </div>
     </nav>
+    <form id="sidebar-delete-zone-form" method="POST" class="hidden"></form>
 </aside>
 <main class="flex-1 p-6">
     {{block "content" .}}{{end}}
@@ -129,5 +130,24 @@
         document.documentElement.classList.toggle('dark');
         localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
     });
+    const removeZoneButton = document.getElementById('sidebar-remove-zone');
+    const deleteForm = document.getElementById('sidebar-delete-zone-form');
+    if (removeZoneButton && deleteForm) {
+        removeZoneButton.addEventListener('click', () => {
+            const serverID = prompt('Enter the server ID for the zone to delete:');
+            if (!serverID) {
+                return;
+            }
+            const zoneID = prompt('Enter the zone name (e.g., example.org.):');
+            if (!zoneID) {
+                return;
+            }
+            if (!confirm(`Delete zone "${zoneID}" from server "${serverID}"?`)) {
+                return;
+            }
+            deleteForm.setAttribute('action', `/zones/${encodeURIComponent(serverID)}/${encodeURIComponent(zoneID)}/delete`);
+            deleteForm.submit();
+        });
+    }
 </script>
 {{end}}
