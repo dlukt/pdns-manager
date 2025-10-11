@@ -18,6 +18,7 @@ import (
 	"github.com/dlukt/pdns-manager/config"
 	"github.com/dlukt/pdns-manager/ent"
 	"github.com/dlukt/pdns-manager/ent/settings"
+	"github.com/dlukt/pdns-manager/pdns"
 	"github.com/dlukt/pdns-manager/session"
 	"github.com/dlukt/pdns-manager/web"
 	"github.com/spf13/cobra"
@@ -90,7 +91,17 @@ var startCmd = &cobra.Command{
 			mailer = auth.NewSMTPMailer(smtpAddr, smtpUser, smtpPass, mailFrom)
 		}
 		sessions := session.NewStore(key)
-		mux := web.NewHandler(client, auth.NewService(client, mailer), sessions)
+		var pdnsAPI *pdns.Client
+		if pdnsURL == "" {
+			log.Println("warning: PDNS API URL is not configured; zone management will be disabled")
+		} else {
+			c, err := pdns.NewClient(pdnsURL, pdnsKey, nil)
+			if err != nil {
+				log.Fatalf("failed to create PDNS client: %v", err)
+			}
+			pdnsAPI = c
+		}
+		mux := web.NewHandler(client, auth.NewService(client, mailer), sessions, pdnsAPI)
 		fmt.Println("listening on :8080")
 		if err := http.ListenAndServe(":8080", mux); err != nil && err != http.ErrServerClosed {
 			fmt.Println("server error:", err)

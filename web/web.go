@@ -1,7 +1,9 @@
 package web
 
 import (
+	"context"
 	"embed"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
@@ -12,10 +14,11 @@ import (
 	"github.com/dlukt/pdns-manager/config"
 	"github.com/dlukt/pdns-manager/ent"
 	"github.com/dlukt/pdns-manager/ent/settings"
+	"github.com/dlukt/pdns-manager/pdns"
 	"github.com/dlukt/pdns-manager/session"
 )
 
-//go:embed templates/*.html templates/auth/*.html templates/settings/*.html static/*
+//go:embed templates/*.html templates/auth/*.html templates/settings/*.html templates/zones/*.html static/*
 var contentFS embed.FS
 
 var (
@@ -79,14 +82,28 @@ func mustTemplates() map[string]*template.Template {
 }
 
 type handler struct {
-	auth     *auth.Service
-	sessions *session.Store
-	client   *ent.Client
+	auth       *auth.Service
+	sessions   *session.Store
+	client     *ent.Client
+	pdnsClient pdnsClient
+	zoneKinds  []string
+}
+
+type pdnsClient interface {
+	ListServers(ctx context.Context) ([]pdns.Server, error)
+	CreateZone(ctx context.Context, serverID string, zone pdns.Zone) (*pdns.Zone, error)
+	DeleteZone(ctx context.Context, serverID, zoneID string) error
 }
 
 // NewHandler returns an http.Handler with application routes.
-func NewHandler(c *ent.Client, a *auth.Service, s *session.Store) http.Handler {
-	h := &handler{auth: a, sessions: s, client: c}
+func NewHandler(c *ent.Client, a *auth.Service, s *session.Store, p pdnsClient) http.Handler {
+	h := &handler{
+		auth:       a,
+		sessions:   s,
+		client:     c,
+		pdnsClient: p,
+		zoneKinds:  []string{"Native", "Master", "Slave"},
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", h.index)
 	mux.HandleFunc("GET /auth/register", h.getRegister)
@@ -101,6 +118,9 @@ func NewHandler(c *ent.Client, a *auth.Service, s *session.Store) http.Handler {
 	mux.HandleFunc("GET /auth/confirm_mail", h.confirmMail)
 	mux.HandleFunc("GET /settings/server", h.getServerSettings)
 	mux.HandleFunc("POST /settings/server", h.postServerSettings)
+	mux.HandleFunc("GET /zones/new", h.getZoneNew)
+	mux.HandleFunc("POST /zones", h.postZoneCreate)
+	mux.HandleFunc("POST /zones/{serverID}/{zoneID}/delete", h.postZoneDelete)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 	return h.loginRequired(mux)
 }
@@ -129,6 +149,194 @@ func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 	if err := tmpl["index.html"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+type zoneForm struct {
+	ServerID string
+	Name     string
+	Kind     string
+	Masters  string
+}
+
+type zonePageData struct {
+	Title       string
+	Error       string
+	FieldErrors map[string]string
+	Form        zoneForm
+	Servers     []pdns.Server
+	Kinds       []string
+}
+
+func (h *handler) getZoneNew(w http.ResponseWriter, r *http.Request) {
+	data := zonePageData{
+		Title:       "Create Zone",
+		FieldErrors: map[string]string{},
+		Form: zoneForm{
+			Kind: h.zoneKinds[0],
+		},
+		Kinds: h.zoneKinds,
+	}
+	servers, err := h.listServers(r)
+	if err != nil {
+		data.Error = err.Error()
+	} else {
+		data.Servers = servers
+	}
+	h.renderZoneForm(w, data)
+}
+
+func (h *handler) postZoneCreate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	form := zoneForm{
+		ServerID: strings.TrimSpace(r.FormValue("server_id")),
+		Name:     strings.TrimSpace(r.FormValue("name")),
+		Kind:     strings.TrimSpace(r.FormValue("kind")),
+		Masters:  strings.TrimSpace(r.FormValue("masters")),
+	}
+	if form.Kind == "" {
+		form.Kind = h.zoneKinds[0]
+	}
+	data := zonePageData{
+		Title:       "Create Zone",
+		FieldErrors: map[string]string{},
+		Form:        form,
+		Kinds:       h.zoneKinds,
+	}
+	servers, err := h.listServers(r)
+	if err != nil {
+		data.Error = err.Error()
+		h.renderZoneForm(w, data)
+		return
+	}
+	data.Servers = servers
+	if form.ServerID == "" {
+		data.FieldErrors["server_id"] = "Please select a server."
+	} else if !h.serverExists(servers, form.ServerID) {
+		data.FieldErrors["server_id"] = "Selected server is not available."
+	}
+	if form.Name == "" {
+		data.FieldErrors["name"] = "Zone name is required."
+	}
+	normalizedKind, kindErr := h.normalizeKind(form.Kind)
+	if kindErr != "" {
+		data.FieldErrors["kind"] = kindErr
+	} else {
+		data.Form.Kind = normalizedKind
+	}
+	masters := parseMasters(form.Masters)
+	if kindErr == "" && normalizedKind == "Slave" && len(masters) == 0 {
+		data.FieldErrors["masters"] = "At least one master is required for slave zones."
+	}
+	if len(data.FieldErrors) > 0 {
+		h.renderZoneForm(w, data)
+		return
+	}
+	zone := pdns.Zone{
+		Name: form.Name,
+		Kind: data.Form.Kind,
+	}
+	if len(masters) > 0 {
+		zone.Masters = masters
+	}
+	if _, err := h.pdnsClient.CreateZone(r.Context(), form.ServerID, zone); err != nil {
+		data.Error = err.Error()
+		h.renderZoneForm(w, data)
+		return
+	}
+	msg := fmt.Sprintf("Zone %s created successfully.", form.Name)
+	http.Redirect(w, r, "/zones?success="+url.QueryEscape(msg), http.StatusFound)
+}
+
+func (h *handler) postZoneDelete(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("session")
+	if err != nil {
+		http.Redirect(w, r, "/auth/login", http.StatusFound)
+		return
+	}
+	if _, ok := h.sessions.Get(c.Value); !ok {
+		http.Redirect(w, r, "/auth/login", http.StatusFound)
+		return
+	}
+	serverID := r.PathValue("serverID")
+	zoneID := r.PathValue("zoneID")
+	if serverID == "" || zoneID == "" {
+		http.Error(w, "missing identifiers", http.StatusBadRequest)
+		return
+	}
+	if h.pdnsClient == nil {
+		http.Redirect(w, r, "/zones?error="+url.QueryEscape("PowerDNS client is not configured"), http.StatusFound)
+		return
+	}
+	if err := h.pdnsClient.DeleteZone(r.Context(), serverID, zoneID); err != nil {
+		http.Redirect(w, r, "/zones?error="+url.QueryEscape(err.Error()), http.StatusFound)
+		return
+	}
+	msg := fmt.Sprintf("Zone %s deleted successfully.", zoneID)
+	http.Redirect(w, r, "/zones?success="+url.QueryEscape(msg), http.StatusFound)
+}
+
+func (h *handler) renderZoneForm(w http.ResponseWriter, data zonePageData) {
+	if err := tmpl["zones/new.html"].Execute(w, data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h *handler) listServers(r *http.Request) ([]pdns.Server, error) {
+	if h.pdnsClient == nil {
+		return nil, fmt.Errorf("PowerDNS client is not configured")
+	}
+	servers, err := h.pdnsClient.ListServers(r.Context())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load servers: %w", err)
+	}
+	return servers, nil
+}
+
+func (h *handler) serverExists(servers []pdns.Server, id string) bool {
+	for _, s := range servers {
+		if s.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *handler) normalizeKind(kind string) (string, string) {
+	switch strings.ToLower(kind) {
+	case "native":
+		return "Native", ""
+	case "master":
+		return "Master", ""
+	case "slave":
+		return "Slave", ""
+	default:
+		return kind, "Invalid zone kind."
+	}
+}
+
+func parseMasters(input string) []string {
+	if input == "" {
+		return nil
+	}
+	fields := strings.FieldsFunc(input, func(r rune) bool {
+		switch r {
+		case ',', ';', '\n', '\r':
+			return true
+		default:
+			return false
+		}
+	})
+	masters := make([]string, 0, len(fields))
+	for _, f := range fields {
+		v := strings.TrimSpace(f)
+		if v != "" {
+			masters = append(masters, v)
+		}
+	}
+	return masters
 }
 
 func (h *handler) getRegister(w http.ResponseWriter, r *http.Request) {
