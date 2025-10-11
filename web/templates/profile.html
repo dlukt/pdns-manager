@@ -1,0 +1,72 @@
+{{define "profile.html"}}
+{{template "layout" .}}
+{{end}}
+{{define "content"}}
+<h1 class="text-2xl font-bold mb-6">Profile</h1>
+<div class="space-y-8">
+    <section class="bg-white dark:bg-gray-800 shadow rounded p-6">
+        <h2 class="text-xl font-semibold mb-4">Profile Information</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">Update the details other users see when you interact with the dashboard.</p>
+        {{if .ProfileError}}<div class="mb-4 text-sm text-red-600 dark:text-red-400">{{.ProfileError}}</div>{{end}}
+        {{if .ProfileSuccess}}<div class="mb-4 text-sm text-green-600 dark:text-green-400">{{.ProfileSuccess}}</div>{{end}}
+        <form method="POST" action="/profile" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block mb-1" for="first_name">First Name</label>
+                <input id="first_name" name="first_name" type="text" value="{{if .User}}{{.User.FirstName}}{{end}}" class="w-full p-2 border rounded bg-white dark:bg-gray-900 dark:text-white" required>
+            </div>
+            <div>
+                <label class="block mb-1" for="last_name">Last Name</label>
+                <input id="last_name" name="last_name" type="text" value="{{if .User}}{{.User.LastName}}{{end}}" class="w-full p-2 border rounded bg-white dark:bg-gray-900 dark:text-white" required>
+            </div>
+            <div class="md:col-span-2">
+                <span class="block mb-1">Email Address</span>
+                <div class="flex items-center justify-between p-2 border rounded bg-gray-50 dark:bg-gray-900 dark:text-white">
+                    <span>{{if .User}}{{.User.Email}}{{end}}</span>
+                    <span class="text-xs {{if .User.EmailVerified}}text-green-600 dark:text-green-400{{else}}text-yellow-600 dark:text-yellow-400{{end}}">{{if .User.EmailVerified}}Verified{{else}}Pending verification{{end}}</span>
+                </div>
+            </div>
+            <div class="md:col-span-2 flex justify-end">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">Save Changes</button>
+            </div>
+        </form>
+    </section>
+    <section class="bg-white dark:bg-gray-800 shadow rounded p-6">
+        <h2 class="text-xl font-semibold mb-4">Change Password</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">Use a strong password with at least 8 characters.</p>
+        {{if .PasswordError}}<div class="mb-4 text-sm text-red-600 dark:text-red-400">{{.PasswordError}}</div>{{end}}
+        {{if .PasswordSuccess}}<div class="mb-4 text-sm text-green-600 dark:text-green-400">{{.PasswordSuccess}}</div>{{end}}
+        <form method="POST" action="/profile/password" class="space-y-4 max-w-lg">
+            <div>
+                <label class="block mb-1" for="current_password">Current Password</label>
+                <input id="current_password" name="current_password" type="password" class="w-full p-2 border rounded bg-white dark:bg-gray-900 dark:text-white" required>
+            </div>
+            <div>
+                <label class="block mb-1" for="new_password">New Password</label>
+                <input id="new_password" name="new_password" type="password" class="w-full p-2 border rounded bg-white dark:bg-gray-900 dark:text-white" required>
+            </div>
+            <div>
+                <label class="block mb-1" for="confirm_password">Confirm New Password</label>
+                <input id="confirm_password" name="confirm_password" type="password" class="w-full p-2 border rounded bg-white dark:bg-gray-900 dark:text-white" required>
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">Update Password</button>
+            </div>
+        </form>
+    </section>
+    <section class="bg-white dark:bg-gray-800 shadow rounded p-6">
+        <h2 class="text-xl font-semibold mb-4">Change Email</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">We'll send a verification link to your new email address.</p>
+        {{if .EmailError}}<div class="mb-4 text-sm text-red-600 dark:text-red-400">{{.EmailError}}</div>{{end}}
+        {{if .EmailSuccess}}<div class="mb-4 text-sm text-green-600 dark:text-green-400">{{.EmailSuccess}}</div>{{end}}
+        <form method="POST" action="/profile/email" class="space-y-4 max-w-lg">
+            <div>
+                <label class="block mb-1" for="email">New Email Address</label>
+                <input id="email" name="email" type="email" value="{{if .User}}{{.User.Email}}{{end}}" class="w-full p-2 border rounded bg-white dark:bg-gray-900 dark:text-white" required>
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">Send Verification</button>
+            </div>
+        </form>
+    </section>
+</div>
+{{end}}
