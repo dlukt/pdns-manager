@@ -3,10 +3,12 @@ package web
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strings"
 
@@ -89,6 +91,8 @@ type handler struct {
 	zoneKinds  []string
 }
 
+var errUnauthenticated = errors.New("unauthenticated")
+
 type pdnsClient interface {
 	ListServers(ctx context.Context) ([]pdns.Server, error)
 	ListZones(ctx context.Context, serverID string) ([]pdns.Zone, error)
@@ -114,6 +118,10 @@ func NewHandler(c *ent.Client, a *auth.Service, s *session.Store, p pdnsClient) 
 	mux.HandleFunc("GET /auth/confirm_mail", h.confirmMail)
 	mux.HandleFunc("GET /settings/server", h.getServerSettings)
 	mux.HandleFunc("POST /settings/server", h.postServerSettings)
+	mux.HandleFunc("GET /profile", h.getProfile)
+	mux.HandleFunc("POST /profile", h.postProfileUpdate)
+	mux.HandleFunc("POST /profile/password", h.postProfilePassword)
+	mux.HandleFunc("POST /profile/email", h.postProfileEmail)
 	mux.HandleFunc("GET /zones/new", h.getZoneNew)
 	mux.HandleFunc("POST /zones", h.postZoneCreate)
 	mux.HandleFunc("POST /zones/{serverID}/{zoneID}/delete", h.postZoneDelete)
@@ -140,6 +148,25 @@ func (h *handler) loginRequired(next http.Handler) http.Handler {
 	})
 }
 
+func (h *handler) currentUser(r *http.Request) (*ent.User, error) {
+	c, err := r.Cookie("session")
+	if err != nil {
+		return nil, errUnauthenticated
+	}
+	id, ok := h.sessions.Get(c.Value)
+	if !ok {
+		return nil, errUnauthenticated
+	}
+	u, err := h.client.User.Get(r.Context(), id)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, errUnauthenticated
+		}
+		return nil, err
+	}
+	return u, nil
+}
+
 func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 	if h.pdnsClient != nil {
 		http.Redirect(w, r, "/zones", http.StatusFound)
@@ -160,6 +187,151 @@ type zonesIndexView struct {
 	Error            string
 }
 
+type profileView struct {
+	Title           string
+	User            *ent.User
+	ProfileSuccess  string
+	ProfileError    string
+	PasswordSuccess string
+	PasswordError   string
+	EmailSuccess    string
+	EmailError      string
+}
+
+func (h *handler) renderProfile(w http.ResponseWriter, view profileView) {
+	if err := tmpl["profile.html"].Execute(w, view); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h *handler) getProfile(w http.ResponseWriter, r *http.Request) {
+	u, err := h.currentUser(r)
+	if err != nil {
+		if errors.Is(err, errUnauthenticated) {
+			http.Redirect(w, r, "/auth/login", http.StatusFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	view := profileView{Title: "Profile", User: u}
+	h.renderProfile(w, view)
+}
+
+func (h *handler) postProfileUpdate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	u, err := h.currentUser(r)
+	if err != nil {
+		if errors.Is(err, errUnauthenticated) {
+			http.Redirect(w, r, "/auth/login", http.StatusFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	view := profileView{Title: "Profile", User: u}
+	firstName := strings.TrimSpace(r.FormValue("first_name"))
+	lastName := strings.TrimSpace(r.FormValue("last_name"))
+	if firstName == "" || lastName == "" {
+		view.ProfileError = "First and last name are required."
+		h.renderProfile(w, view)
+		return
+	}
+	updated, err := h.auth.UpdateProfile(r.Context(), u.ID, firstName, lastName)
+	if err != nil {
+		view.ProfileError = err.Error()
+		h.renderProfile(w, view)
+		return
+	}
+	view.User = updated
+	view.ProfileSuccess = "Profile updated successfully."
+	h.renderProfile(w, view)
+}
+
+func (h *handler) postProfilePassword(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	u, err := h.currentUser(r)
+	if err != nil {
+		if errors.Is(err, errUnauthenticated) {
+			http.Redirect(w, r, "/auth/login", http.StatusFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	view := profileView{Title: "Profile", User: u}
+	currentPassword := r.FormValue("current_password")
+	newPassword := r.FormValue("new_password")
+	confirmPassword := r.FormValue("confirm_password")
+	if newPassword != confirmPassword {
+		view.PasswordError = "New password confirmation does not match."
+		h.renderProfile(w, view)
+		return
+	}
+	if len(newPassword) < 8 {
+		view.PasswordError = "New password must be at least 8 characters."
+		h.renderProfile(w, view)
+		return
+	}
+	if err := h.auth.ChangePassword(r.Context(), u.ID, currentPassword, newPassword); err != nil {
+		if err.Error() == "invalid password" {
+			view.PasswordError = "Current password is incorrect."
+		} else {
+			view.PasswordError = err.Error()
+		}
+		h.renderProfile(w, view)
+		return
+	}
+	view.PasswordSuccess = "Password updated successfully."
+	h.renderProfile(w, view)
+}
+
+func (h *handler) postProfileEmail(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	u, err := h.currentUser(r)
+	if err != nil {
+		if errors.Is(err, errUnauthenticated) {
+			http.Redirect(w, r, "/auth/login", http.StatusFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	view := profileView{Title: "Profile", User: u}
+	email := strings.TrimSpace(r.FormValue("email"))
+	if email == "" {
+		view.EmailError = "Email address is required."
+		h.renderProfile(w, view)
+		return
+	}
+	if _, err := mail.ParseAddress(email); err != nil {
+		view.EmailError = "Enter a valid email address."
+		h.renderProfile(w, view)
+		return
+	}
+	if _, err := h.auth.ChangeEmail(r.Context(), u.ID, email); err != nil {
+		view.EmailError = err.Error()
+		h.renderProfile(w, view)
+		return
+	}
+	updated, err := h.client.User.Get(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	view.User = updated
+	view.EmailSuccess = "A verification email has been sent to your new address."
+	h.renderProfile(w, view)
+}
 func (h *handler) listZones(w http.ResponseWriter, r *http.Request) {
 	if h.pdnsClient == nil {
 		http.Error(w, "PowerDNS client not configured", http.StatusServiceUnavailable)
