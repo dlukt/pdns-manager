@@ -79,9 +79,13 @@ var startCmd = &cobra.Command{
 		}
 		pdnsURL = ensureSetting(ctx, client, "pdns_api_url", pdnsURL)
 		pdnsKey = ensureSetting(ctx, client, "pdns_api_key", pdnsKey)
-		pdnsClient, err := pdns.NewClient(pdnsURL, pdnsKey, nil)
-		if err != nil {
-			log.Fatalf("failed creating PDNS client: %v", err)
+		var pdnsClient *pdns.Client
+		if pdnsURL != "" {
+			var err error
+			pdnsClient, err = pdns.NewClient(pdnsURL, pdnsKey, nil)
+			if err != nil {
+				log.Fatalf("failed creating PDNS client: %v", err)
+			}
 		}
 		config.PDNSAPIURL = pdnsURL
 		config.PDNSAPIKey = pdnsKey
