@@ -79,6 +79,14 @@ var startCmd = &cobra.Command{
 		}
 		pdnsURL = ensureSetting(ctx, client, "pdns_api_url", pdnsURL)
 		pdnsKey = ensureSetting(ctx, client, "pdns_api_key", pdnsKey)
+		var pdnsClient *pdns.Client
+		if pdnsURL != "" {
+			var err error
+			pdnsClient, err = pdns.NewClient(pdnsURL, pdnsKey, nil)
+			if err != nil {
+				log.Fatalf("failed creating PDNS client: %v", err)
+			}
+		}
 		config.PDNSAPIURL = pdnsURL
 		config.PDNSAPIKey = pdnsKey
 		key := make([]byte, 32)
@@ -91,17 +99,7 @@ var startCmd = &cobra.Command{
 			mailer = auth.NewSMTPMailer(smtpAddr, smtpUser, smtpPass, mailFrom)
 		}
 		sessions := session.NewStore(key)
-		var pdnsAPI *pdns.Client
-		if pdnsURL == "" {
-			log.Println("warning: PDNS API URL is not configured; zone management will be disabled")
-		} else {
-			c, err := pdns.NewClient(pdnsURL, pdnsKey, nil)
-			if err != nil {
-				log.Fatalf("failed to create PDNS client: %v", err)
-			}
-			pdnsAPI = c
-		}
-		mux := web.NewHandler(client, auth.NewService(client, mailer), sessions, pdnsAPI)
+		mux := web.NewHandler(client, auth.NewService(client, mailer), sessions, pdnsClient)
 		fmt.Println("listening on :8080")
 		if err := http.ListenAndServe(":8080", mux); err != nil && err != http.ErrServerClosed {
 			fmt.Println("server error:", err)
