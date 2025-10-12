@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 )
 
@@ -67,5 +68,48 @@ func TestCreateZone(t *testing.T) {
 	}
 	if res.ID != "example.org." {
 		t.Fatalf("unexpected zone: %+v", res)
+	}
+}
+
+func TestClientPathEscaping(t *testing.T) {
+	serverID := "srv with space"
+	zoneID := "example.com/with/slash"
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+			t.Fatalf("unexpected method %s", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(struct {
+			ID string `json:"id"`
+		}{ID: zoneID})
+	})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			expected := "/servers/" + url.PathEscape(serverID) + "/zones"
+			if r.URL.EscapedPath() != expected {
+				t.Fatalf("unexpected create path %q", r.URL.EscapedPath())
+			}
+		case http.MethodDelete:
+			expected := "/servers/" + url.PathEscape(serverID) + "/zones/" + url.PathEscape(zoneID)
+			if r.URL.EscapedPath() != expected {
+				t.Fatalf("unexpected delete path %q", r.URL.EscapedPath())
+			}
+		}
+		mux.ServeHTTP(w, r)
+	}))
+	defer srv.Close()
+
+	c, err := NewClient(srv.URL, "", nil)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	if _, err := c.CreateZone(context.Background(), serverID, Zone{Name: zoneID}); err != nil {
+		t.Fatalf("CreateZone: %v", err)
+	}
+	if err := c.DeleteZone(context.Background(), serverID, zoneID); err != nil {
+		t.Fatalf("DeleteZone: %v", err)
 	}
 }

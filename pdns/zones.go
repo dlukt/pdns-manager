@@ -2,13 +2,12 @@ package pdns
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 )
 
 // ListZones returns all zones from the given server.
 func (c *Client) ListZones(ctx context.Context, serverID string) ([]Zone, error) {
-	path := fmt.Sprintf("/servers/%s/zones", serverID)
+	path := c.path("servers", serverID, "zones")
 	req, err := c.newRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
@@ -22,7 +21,7 @@ func (c *Client) ListZones(ctx context.Context, serverID string) ([]Zone, error)
 
 // GetZone retrieves the zone details.
 func (c *Client) GetZone(ctx context.Context, serverID, zoneID string) (*Zone, error) {
-	path := fmt.Sprintf("/servers/%s/zones/%s", serverID, zoneID)
+	path := c.path("servers", serverID, "zones", zoneID)
 	req, err := c.newRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
@@ -36,7 +35,7 @@ func (c *Client) GetZone(ctx context.Context, serverID, zoneID string) (*Zone, e
 
 // CreateZone creates a new zone on the specified server.
 func (c *Client) CreateZone(ctx context.Context, serverID string, zone Zone) (*Zone, error) {
-	path := fmt.Sprintf("/servers/%s/zones", serverID)
+	path := c.path("servers", serverID, "zones")
 	req, err := c.newRequest(ctx, http.MethodPost, path, zone)
 	if err != nil {
 		return nil, err
@@ -50,7 +49,7 @@ func (c *Client) CreateZone(ctx context.Context, serverID string, zone Zone) (*Z
 
 // DeleteZone removes an existing zone from the server.
 func (c *Client) DeleteZone(ctx context.Context, serverID, zoneID string) error {
-	path := fmt.Sprintf("/servers/%s/zones/%s", serverID, zoneID)
+	path := c.path("servers", serverID, "zones", zoneID)
 	req, err := c.newRequest(ctx, http.MethodDelete, path, nil)
 	if err != nil {
 		return err
@@ -61,7 +60,7 @@ func (c *Client) DeleteZone(ctx context.Context, serverID, zoneID string) error 
 // ModifyRRsets applies RRSet changes to the given zone.
 func (c *Client) ModifyRRsets(ctx context.Context, serverID, zoneID string, rrsets []RRSet) error {
 	payload := map[string]interface{}{"rrsets": rrsets}
-	path := fmt.Sprintf("/servers/%s/zones/%s", serverID, zoneID)
+	path := c.path("servers", serverID, "zones", zoneID)
 	req, err := c.newRequest(ctx, http.MethodPatch, path, payload)
 	if err != nil {
 		return err

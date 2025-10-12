@@ -7,7 +7,7 @@ import (
 
 // ListServers returns all configured servers.
 func (c *Client) ListServers(ctx context.Context) ([]Server, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "/servers", nil)
+	req, err := c.newRequest(ctx, http.MethodGet, c.path("servers"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -20,7 +20,7 @@ func (c *Client) ListServers(ctx context.Context) ([]Server, error) {
 
 // GetServer returns details about a specific server.
 func (c *Client) GetServer(ctx context.Context, id string) (*Server, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "/servers/"+id, nil)
+	req, err := c.newRequest(ctx, http.MethodGet, c.path("servers", id), nil)
 	if err != nil {
 		return nil, err
 	}
