@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // Client provides access to the PowerDNS Authoritative HTTP API.
@@ -31,8 +32,10 @@ func NewClient(endpoint, apiKey string, httpClient *http.Client) (*Client, error
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path string, body interface{}) (*http.Request, error) {
-	rel := &url.URL{Path: path}
-	u := c.endpoint.ResolveReference(rel)
+	u, err := c.endpoint.Parse(path)
+	if err != nil {
+		return nil, err
+	}
 	var buf io.ReadWriter
 	if body != nil {
 		buf = new(bytes.Buffer)
@@ -51,6 +54,17 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body inter
 		req.Header.Set("X-API-Key", c.apiKey)
 	}
 	return req, nil
+}
+
+func (c *Client) path(segments ...string) string {
+	if len(segments) == 0 {
+		return "/"
+	}
+	parts := make([]string, len(segments))
+	for i, segment := range segments {
+		parts[i] = url.PathEscape(segment)
+	}
+	return "/" + strings.Join(parts, "/")
 }
 
 func (c *Client) do(req *http.Request, v interface{}) error {
