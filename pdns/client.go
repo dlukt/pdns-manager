@@ -32,10 +32,37 @@ func NewClient(endpoint, apiKey string, httpClient *http.Client) (*Client, error
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path string, body interface{}) (*http.Request, error) {
-	u, err := c.endpoint.Parse(path)
-	if err != nil {
-		return nil, err
+	basePath := strings.TrimSuffix(c.endpoint.EscapedPath(), "/")
+	var fullPath string
+	switch {
+	case path == "":
+		if basePath == "" {
+			fullPath = "/"
+		} else {
+			fullPath = basePath
+		}
+	case strings.HasPrefix(path, "/"):
+		if basePath == "" {
+			fullPath = path
+		} else {
+			fullPath = basePath + path
+		}
+	default:
+		if basePath == "" {
+			fullPath = "/" + path
+		} else {
+			fullPath = basePath + "/" + path
+		}
 	}
+
+	u := *c.endpoint
+	decodedPath, err := url.PathUnescape(fullPath)
+	if err != nil {
+		decodedPath = fullPath
+	}
+	u.Path = decodedPath
+	u.RawPath = fullPath
+
 	var buf io.ReadWriter
 	if body != nil {
 		buf = new(bytes.Buffer)
