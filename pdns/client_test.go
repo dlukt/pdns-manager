@@ -113,3 +113,24 @@ func TestClientPathEscaping(t *testing.T) {
 		t.Fatalf("DeleteZone: %v", err)
 	}
 }
+
+func TestClientBasePath(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/servers", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.EscapedPath() != "/api/v1/servers" {
+			t.Fatalf("unexpected path %q", r.URL.EscapedPath())
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]Server{})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c, err := NewClient(srv.URL+"/api/v1", "", nil)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	if _, err := c.ListServers(context.Background()); err != nil {
+		t.Fatalf("ListServers: %v", err)
+	}
+}
