@@ -11,6 +11,7 @@ import (
 	"net/mail"
 	"net/url"
 	"strings"
+	"unicode"
 
 	"github.com/dlukt/pdns-manager/auth"
 	"github.com/dlukt/pdns-manager/config"
@@ -551,16 +552,16 @@ func (h *handler) serverExists(servers []pdns.Server, id string) bool {
 }
 
 func (h *handler) normalizeKind(kind string) (string, string) {
-	switch strings.ToLower(kind) {
-	case "native":
-		return "Native", ""
-	case "master":
-		return "Master", ""
-	case "slave":
-		return "Slave", ""
-	default:
-		return kind, "Invalid zone kind."
+	allowed := h.zoneKinds
+	if len(allowed) == 0 {
+		allowed = []string{"Native", "Master", "Slave"}
 	}
+	for _, option := range allowed {
+		if strings.EqualFold(option, kind) {
+			return option, ""
+		}
+	}
+	return kind, "Invalid zone kind."
 }
 
 func parseMasters(input string) []string {
@@ -569,10 +570,10 @@ func parseMasters(input string) []string {
 	}
 	fields := strings.FieldsFunc(input, func(r rune) bool {
 		switch r {
-		case ',', ';', '\n', '\r':
+		case ',', ';', '\n', '\r', '\t':
 			return true
 		default:
-			return false
+			return unicode.IsSpace(r)
 		}
 	})
 	masters := make([]string, 0, len(fields))
