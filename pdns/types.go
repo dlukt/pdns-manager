@@ -33,3 +33,15 @@ type Record struct {
 	Content  string `json:"content"`
 	Disabled bool   `json:"disabled"`
 }
+
+// SearchResult represents a result from a search operation.
+type SearchResult struct {
+	Content    string `json:"content"`
+	Disabled   bool   `json:"disabled"`
+	Name       string `json:"name"`
+	ObjectType string `json:"object_type"`
+	ZoneID     string `json:"zone_id"`
+	Zone       string `json:"zone"`
+	Type       string `json:"type"`
+	TTL        int    `json:"ttl"`
+}
