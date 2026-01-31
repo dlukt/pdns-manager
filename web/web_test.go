@@ -18,6 +18,16 @@ type stubPDNSClient struct {
 	errServers        error
 	errZones          error
 	lastZoneServer    string
+	zoneDetails       *pdns.Zone
+	zoneDetailsErr    error
+	zoneDetailsServer string
+	zoneDetailsID     string
+	searchResults     []pdns.SearchResult
+	searchErr         error
+	searchServer      string
+	searchQuery       string
+	searchMax         int
+	searchObjectType  string
 	errCreate         error
 	errDelete         error
 	createZoneServer  string
@@ -39,6 +49,26 @@ func (s *stubPDNSClient) ListZones(_ context.Context, serverID string) ([]pdns.Z
 		return nil, s.errZones
 	}
 	return s.zones[serverID], nil
+}
+
+func (s *stubPDNSClient) GetZone(_ context.Context, serverID, zoneID string) (*pdns.Zone, error) {
+	s.zoneDetailsServer = serverID
+	s.zoneDetailsID = zoneID
+	if s.zoneDetailsErr != nil {
+		return nil, s.zoneDetailsErr
+	}
+	return s.zoneDetails, nil
+}
+
+func (s *stubPDNSClient) SearchData(_ context.Context, serverID, q string, max int, objectType string) ([]pdns.SearchResult, error) {
+	s.searchServer = serverID
+	s.searchQuery = q
+	s.searchMax = max
+	s.searchObjectType = objectType
+	if s.searchErr != nil {
+		return nil, s.searchErr
+	}
+	return s.searchResults, nil
 }
 
 func (s *stubPDNSClient) CreateZone(_ context.Context, serverID string, zone pdns.Zone) (*pdns.Zone, error) {
@@ -176,5 +206,86 @@ func TestPostZoneDeleteRedirectsToZones(t *testing.T) {
 	}
 	if stub.deletedZoneServer != "srv1" || stub.deletedZoneID != "example.com." {
 		t.Fatalf("unexpected delete args: server=%q zone=%q", stub.deletedZoneServer, stub.deletedZoneID)
+	}
+}
+
+func TestGetSearchCallsSearchData(t *testing.T) {
+	stub := &stubPDNSClient{
+		servers: []pdns.Server{{ID: "srv1"}, {ID: "srv2"}},
+		searchResults: []pdns.SearchResult{{
+			Name:    "www.example.com",
+			Type:    "A",
+			Content: "1.2.3.4",
+			Zone:    "example.com.",
+			TTL:     300,
+		}},
+	}
+	h := &handler{pdnsClient: stub}
+	req := httptest.NewRequest(http.MethodGet, "/search?server=srv2&q=example&max=25&object_type=record", nil)
+	res := httptest.NewRecorder()
+
+	h.getSearch(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.Code)
+	}
+	if stub.searchServer != "srv2" {
+		t.Fatalf("expected SearchData server to be srv2, got %q", stub.searchServer)
+	}
+	if stub.searchQuery != "example" {
+		t.Fatalf("expected SearchData query to be example, got %q", stub.searchQuery)
+	}
+	if stub.searchMax != 25 {
+		t.Fatalf("expected SearchData max to be 25, got %d", stub.searchMax)
+	}
+	if stub.searchObjectType != "record" {
+		t.Fatalf("expected SearchData object type to be record, got %q", stub.searchObjectType)
+	}
+	body := res.Body.String()
+	if !strings.Contains(body, "www.example.com") {
+		t.Fatalf("expected search result in response, got %q", body)
+	}
+}
+
+func TestGetZoneRecordsRendersRRsets(t *testing.T) {
+	stub := &stubPDNSClient{
+		servers: []pdns.Server{{ID: "srv1"}},
+		zoneDetails: &pdns.Zone{
+			ID:   "example.com.",
+			Name: "example.com.",
+			RRsets: []pdns.RRSet{{
+				Name: "www.example.com.",
+				Type: "A",
+				TTL:  3600,
+				Records: []pdns.Record{{
+					Content:  "1.2.3.4",
+					Disabled: false,
+				}},
+			}},
+		},
+	}
+	h := &handler{pdnsClient: stub}
+	req := httptest.NewRequest(http.MethodGet, "/zones/srv1/example.com./", nil)
+	req.SetPathValue("serverID", "srv1")
+	req.SetPathValue("zoneID", "example.com.")
+	res := httptest.NewRecorder()
+
+	h.getZoneRecords(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.Code)
+	}
+	if stub.zoneDetailsServer != "srv1" {
+		t.Fatalf("expected GetZone server to be srv1, got %q", stub.zoneDetailsServer)
+	}
+	if stub.zoneDetailsID != "example.com." {
+		t.Fatalf("expected GetZone zoneID to be example.com., got %q", stub.zoneDetailsID)
+	}
+	body := res.Body.String()
+	if !strings.Contains(body, "www.example.com.") {
+		t.Fatalf("expected rrset name in response, got %q", body)
+	}
+	if !strings.Contains(body, "1.2.3.4") {
+		t.Fatalf("expected record content in response, got %q", body)
 	}
 }

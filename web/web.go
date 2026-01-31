@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -97,8 +98,10 @@ var errUnauthenticated = errors.New("unauthenticated")
 type pdnsClient interface {
 	ListServers(ctx context.Context) ([]pdns.Server, error)
 	ListZones(ctx context.Context, serverID string) ([]pdns.Zone, error)
+	GetZone(ctx context.Context, serverID, zoneID string) (*pdns.Zone, error)
 	CreateZone(ctx context.Context, serverID string, zone pdns.Zone) (*pdns.Zone, error)
 	DeleteZone(ctx context.Context, serverID, zoneID string) error
+	SearchData(ctx context.Context, serverID, q string, max int, objectType string) ([]pdns.SearchResult, error)
 }
 
 // NewHandler returns an http.Handler with application routes.
@@ -107,6 +110,8 @@ func NewHandler(c *ent.Client, a *auth.Service, s *session.Store, p pdnsClient) 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", h.index)
 	mux.HandleFunc("GET /zones", h.listZones)
+	mux.HandleFunc("GET /zones/{serverID}/{zoneID}", h.getZoneRecords)
+	mux.HandleFunc("GET /search", h.getSearch)
 	mux.HandleFunc("GET /auth/register", h.getRegister)
 	mux.HandleFunc("POST /auth/register", h.postRegister)
 	mux.HandleFunc("GET /auth/login", h.getLogin)
@@ -188,6 +193,25 @@ type zonesIndexView struct {
 	Error            string
 }
 
+type searchView struct {
+	Title            string
+	Servers          []pdns.Server
+	SelectedServerID string
+	Query            string
+	ObjectType       string
+	Max              int
+	Results          []pdns.SearchResult
+	Error            string
+}
+
+type zoneRecordsView struct {
+	Title    string
+	ServerID string
+	ZoneID   string
+	Zone     *pdns.Zone
+	Error    string
+}
+
 type profileView struct {
 	Title           string
 	User            *ent.User
@@ -201,6 +225,18 @@ type profileView struct {
 
 func (h *handler) renderProfile(w http.ResponseWriter, view profileView) {
 	if err := tmpl["profile.html"].Execute(w, view); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h *handler) renderSearch(w http.ResponseWriter, view searchView) {
+	if err := tmpl["search.html"].Execute(w, view); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h *handler) renderZoneRecords(w http.ResponseWriter, view zoneRecordsView) {
+	if err := tmpl["zones/records.html"].Execute(w, view); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -388,6 +424,112 @@ func (h *handler) listZones(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *handler) getSearch(w http.ResponseWriter, r *http.Request) {
+	data := searchView{Title: "Global Search"}
+	if h.pdnsClient == nil {
+		data.Error = "PowerDNS client not configured"
+		h.renderSearch(w, data)
+		return
+	}
+	servers, err := h.listServers(r)
+	if err != nil {
+		data.Error = err.Error()
+		h.renderSearch(w, data)
+		return
+	}
+	data.Servers = servers
+
+	query := r.URL.Query()
+	data.Query = strings.TrimSpace(query.Get("q"))
+	objectType, typeErr := normalizeSearchObjectType(query.Get("object_type"))
+	if typeErr != "" {
+		data.Error = typeErr
+		data.ObjectType = strings.TrimSpace(query.Get("object_type"))
+		h.renderSearch(w, data)
+		return
+	}
+	data.ObjectType = objectType
+
+	maxRaw := strings.TrimSpace(query.Get("max"))
+	if maxRaw != "" {
+		max, err := strconv.Atoi(maxRaw)
+		if err != nil || max <= 0 {
+			data.Error = "Max results must be a positive number."
+			h.renderSearch(w, data)
+			return
+		}
+		data.Max = max
+	}
+
+	if len(servers) == 0 {
+		h.renderSearch(w, data)
+		return
+	}
+
+	selected := strings.TrimSpace(query.Get("server"))
+	if selected == "" {
+		selected = servers[0].ID
+	} else if !h.serverExists(servers, selected) {
+		http.NotFound(w, r)
+		return
+	}
+	data.SelectedServerID = selected
+
+	if data.Query != "" {
+		results, err := h.pdnsClient.SearchData(r.Context(), selected, data.Query, data.Max, data.ObjectType)
+		if err != nil {
+			data.Error = err.Error()
+		} else {
+			data.Results = results
+		}
+	}
+	if data.Error != "" {
+		h.renderSearch(w, data)
+		return
+	}
+	h.renderSearch(w, data)
+}
+
+func (h *handler) getZoneRecords(w http.ResponseWriter, r *http.Request) {
+	serverID := r.PathValue("serverID")
+	zoneID := r.PathValue("zoneID")
+	if serverID == "" || zoneID == "" {
+		http.Error(w, "missing identifiers", http.StatusBadRequest)
+		return
+	}
+	data := zoneRecordsView{
+		Title:    "Zone Records",
+		ServerID: serverID,
+		ZoneID:   zoneID,
+	}
+	if h.pdnsClient == nil {
+		data.Error = "PowerDNS client not configured"
+		h.renderZoneRecords(w, data)
+		return
+	}
+	servers, err := h.listServers(r)
+	if err != nil {
+		data.Error = err.Error()
+		h.renderZoneRecords(w, data)
+		return
+	}
+	if !h.serverExists(servers, serverID) {
+		http.NotFound(w, r)
+		return
+	}
+	zone, err := h.pdnsClient.GetZone(r.Context(), serverID, zoneID)
+	if err != nil {
+		data.Error = err.Error()
+		h.renderZoneRecords(w, data)
+		return
+	}
+	data.Zone = zone
+	if zone.Name != "" {
+		data.Title = "Zone " + zone.Name
+	}
+	h.renderZoneRecords(w, data)
+}
+
 type zoneForm struct {
 	ServerID string
 	Name     string
@@ -562,6 +704,18 @@ func (h *handler) normalizeKind(kind string) (string, string) {
 		}
 	}
 	return kind, "Invalid zone kind."
+}
+
+func normalizeSearchObjectType(objectType string) (string, string) {
+	value := strings.ToLower(strings.TrimSpace(objectType))
+	switch value {
+	case "", "all":
+		return "", ""
+	case "record", "zone":
+		return value, ""
+	default:
+		return value, "Object type must be record or zone."
+	}
 }
 
 func parseMasters(input string) []string {
