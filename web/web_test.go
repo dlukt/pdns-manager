@@ -34,6 +34,10 @@ type stubPDNSClient struct {
 	createdZone       pdns.Zone
 	deletedZoneServer string
 	deletedZoneID     string
+	modifyServer      string
+	modifyZoneID      string
+	modifiedRRsets    []pdns.RRSet
+	modifyErr         error
 }
 
 func (s *stubPDNSClient) ListServers(_ context.Context) ([]pdns.Server, error) {
@@ -86,6 +90,16 @@ func (s *stubPDNSClient) DeleteZone(_ context.Context, serverID, zoneID string) 
 	}
 	s.deletedZoneServer = serverID
 	s.deletedZoneID = zoneID
+	return nil
+}
+
+func (s *stubPDNSClient) ModifyRRsets(_ context.Context, serverID, zoneID string, rrsets []pdns.RRSet) error {
+	s.modifyServer = serverID
+	s.modifyZoneID = zoneID
+	s.modifiedRRsets = rrsets
+	if s.modifyErr != nil {
+		return s.modifyErr
+	}
 	return nil
 }
 
@@ -287,5 +301,242 @@ func TestGetZoneRecordsRendersRRsets(t *testing.T) {
 	}
 	if !strings.Contains(body, "1.2.3.4") {
 		t.Fatalf("expected record content in response, got %q", body)
+	}
+}
+
+func TestPostZoneRecordAddCreatesRRset(t *testing.T) {
+	stub := &stubPDNSClient{
+		zoneDetails: &pdns.Zone{
+			ID:   "example.com.",
+			Name: "example.com.",
+		},
+	}
+	h := &handler{pdnsClient: stub}
+	form := url.Values{
+		"name":    {"www.example.com"},
+		"type":    {"A"},
+		"ttl":     {"300"},
+		"content": {"1.2.3.4"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/zones/srv1/example.com./records", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("serverID", "srv1")
+	req.SetPathValue("zoneID", "example.com.")
+	res := httptest.NewRecorder()
+
+	h.postZoneRecordAdd(res, req)
+
+	if res.Code != http.StatusFound {
+		t.Fatalf("expected redirect, got status %d", res.Code)
+	}
+	if stub.modifyServer != "srv1" {
+		t.Fatalf("expected ModifyRRsets server to be srv1, got %q", stub.modifyServer)
+	}
+	if stub.modifyZoneID != "example.com." {
+		t.Fatalf("expected ModifyRRsets zoneID to be example.com., got %q", stub.modifyZoneID)
+	}
+	if len(stub.modifiedRRsets) != 1 {
+		t.Fatalf("expected 1 rrset, got %d", len(stub.modifiedRRsets))
+	}
+	rrset := stub.modifiedRRsets[0]
+	if rrset.Changetype != "REPLACE" {
+		t.Fatalf("expected changetype REPLACE, got %q", rrset.Changetype)
+	}
+	if rrset.Name != "www.example.com." {
+		t.Fatalf("expected rrset name to be www.example.com., got %q", rrset.Name)
+	}
+	if rrset.Type != "A" {
+		t.Fatalf("expected rrset type A, got %q", rrset.Type)
+	}
+	if rrset.TTL != 300 {
+		t.Fatalf("expected rrset ttl 300, got %d", rrset.TTL)
+	}
+	if len(rrset.Records) != 1 || rrset.Records[0].Content != "1.2.3.4" {
+		t.Fatalf("unexpected rrset records: %+v", rrset.Records)
+	}
+}
+
+func TestPostZoneRecordAddAppendsToExistingRRset(t *testing.T) {
+	stub := &stubPDNSClient{
+		zoneDetails: &pdns.Zone{
+			ID:   "example.com.",
+			Name: "example.com.",
+			RRsets: []pdns.RRSet{{
+				Name: "www.example.com.",
+				Type: "A",
+				TTL:  120,
+				Records: []pdns.Record{{
+					Content:  "1.2.3.4",
+					Disabled: false,
+				}},
+			}},
+		},
+	}
+	h := &handler{pdnsClient: stub}
+	form := url.Values{
+		"name":    {"www.example.com"},
+		"type":    {"A"},
+		"ttl":     {""},
+		"content": {"5.6.7.8"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/zones/srv1/example.com./records", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("serverID", "srv1")
+	req.SetPathValue("zoneID", "example.com.")
+	res := httptest.NewRecorder()
+
+	h.postZoneRecordAdd(res, req)
+
+	if res.Code != http.StatusFound {
+		t.Fatalf("expected redirect, got status %d", res.Code)
+	}
+	if len(stub.modifiedRRsets) != 1 {
+		t.Fatalf("expected 1 rrset, got %d", len(stub.modifiedRRsets))
+	}
+	rrset := stub.modifiedRRsets[0]
+	if rrset.TTL != 120 {
+		t.Fatalf("expected rrset ttl 120, got %d", rrset.TTL)
+	}
+	if len(rrset.Records) != 2 {
+		t.Fatalf("expected 2 records, got %d", len(rrset.Records))
+	}
+}
+
+func TestPostZoneRecordDeleteSingleRecord(t *testing.T) {
+	stub := &stubPDNSClient{
+		zoneDetails: &pdns.Zone{
+			ID:   "example.com.",
+			Name: "example.com.",
+			RRsets: []pdns.RRSet{{
+				Name: "www.example.com.",
+				Type: "A",
+				TTL:  60,
+				Records: []pdns.Record{{
+					Content:  "1.2.3.4",
+					Disabled: false,
+				}, {
+					Content:  "5.6.7.8",
+					Disabled: false,
+				}},
+			}},
+		},
+	}
+	h := &handler{pdnsClient: stub}
+	form := url.Values{
+		"name":    {"www.example.com."},
+		"type":    {"A"},
+		"content": {"5.6.7.8"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/zones/srv1/example.com./records/delete", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("serverID", "srv1")
+	req.SetPathValue("zoneID", "example.com.")
+	res := httptest.NewRecorder()
+
+	h.postZoneRecordDelete(res, req)
+
+	if res.Code != http.StatusFound {
+		t.Fatalf("expected redirect, got status %d", res.Code)
+	}
+	if len(stub.modifiedRRsets) != 1 {
+		t.Fatalf("expected 1 rrset, got %d", len(stub.modifiedRRsets))
+	}
+	rrset := stub.modifiedRRsets[0]
+	if rrset.Changetype != "REPLACE" {
+		t.Fatalf("expected changetype REPLACE, got %q", rrset.Changetype)
+	}
+	if len(rrset.Records) != 1 || rrset.Records[0].Content != "1.2.3.4" {
+		t.Fatalf("unexpected remaining records: %+v", rrset.Records)
+	}
+}
+
+func TestPostZoneRecordUpdateReplacesContent(t *testing.T) {
+	stub := &stubPDNSClient{
+		zoneDetails: &pdns.Zone{
+			ID:   "example.com.",
+			Name: "example.com.",
+			RRsets: []pdns.RRSet{{
+				Name: "www.example.com.",
+				Type: "A",
+				TTL:  120,
+				Records: []pdns.Record{{
+					Content:  "1.2.3.4",
+					Disabled: false,
+				}},
+			}},
+		},
+	}
+	h := &handler{pdnsClient: stub}
+	form := url.Values{
+		"name":      {"www.example.com."},
+		"type":      {"A"},
+		"old_value": {"1.2.3.4"},
+		"new_value": {"5.6.7.8"},
+		"ttl":       {"300"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/zones/srv1/example.com./records/update", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("serverID", "srv1")
+	req.SetPathValue("zoneID", "example.com.")
+	res := httptest.NewRecorder()
+
+	h.postZoneRecordUpdate(res, req)
+
+	if res.Code != http.StatusFound {
+		t.Fatalf("expected redirect, got status %d", res.Code)
+	}
+	if len(stub.modifiedRRsets) != 1 {
+		t.Fatalf("expected 1 rrset, got %d", len(stub.modifiedRRsets))
+	}
+	rrset := stub.modifiedRRsets[0]
+	if rrset.TTL != 300 {
+		t.Fatalf("expected rrset ttl 300, got %d", rrset.TTL)
+	}
+	if len(rrset.Records) != 1 || rrset.Records[0].Content != "5.6.7.8" {
+		t.Fatalf("unexpected record content: %+v", rrset.Records)
+	}
+}
+
+func TestPostZoneRecordDeleteRemovesRRset(t *testing.T) {
+	stub := &stubPDNSClient{
+		zoneDetails: &pdns.Zone{
+			ID:   "example.com.",
+			Name: "example.com.",
+			RRsets: []pdns.RRSet{{
+				Name: "www.example.com.",
+				Type: "A",
+				TTL:  300,
+				Records: []pdns.Record{{
+					Content:  "1.2.3.4",
+					Disabled: false,
+				}},
+			}},
+		},
+	}
+	h := &handler{pdnsClient: stub}
+	form := url.Values{
+		"name": {"www.example.com."},
+		"type": {"A"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/zones/srv1/example.com./records/delete", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("serverID", "srv1")
+	req.SetPathValue("zoneID", "example.com.")
+	res := httptest.NewRecorder()
+
+	h.postZoneRecordDelete(res, req)
+
+	if res.Code != http.StatusFound {
+		t.Fatalf("expected redirect, got status %d", res.Code)
+	}
+	if len(stub.modifiedRRsets) != 1 {
+		t.Fatalf("expected 1 rrset, got %d", len(stub.modifiedRRsets))
+	}
+	rrset := stub.modifiedRRsets[0]
+	if rrset.Changetype != "DELETE" {
+		t.Fatalf("expected changetype DELETE, got %q", rrset.Changetype)
+	}
+	if rrset.Name != "www.example.com." {
+		t.Fatalf("expected rrset name to be www.example.com., got %q", rrset.Name)
 	}
 }

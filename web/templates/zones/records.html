@@ -17,17 +17,70 @@
 </div>
 {{end}}
 
+{{if .Success}}
+<div class="mb-4 rounded border border-green-300 bg-green-50 p-3 text-green-700 dark:border-green-700 dark:bg-green-900/20 dark:text-green-200">
+    {{.Success}}
+</div>
+{{end}}
+
+<section class="bg-white dark:bg-gray-800 shadow rounded p-4 mb-6">
+    <h2 class="text-lg font-semibold mb-2">Add Record</h2>
+    <form method="POST" action="/zones/{{.ServerID}}/{{.ZoneID}}/records" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+            <label class="block mb-1 font-medium" for="record_name">Name</label>
+            <input id="record_name" name="name" type="text" value="{{.Form.Name}}" class="w-full rounded border border-gray-300 bg-white p-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white" placeholder="www.example.com." required>
+        </div>
+        <div>
+            <label class="block mb-1 font-medium" for="record_type">Type</label>
+            <select id="record_type" name="type" class="w-full rounded border border-gray-300 bg-white p-2 uppercase dark:border-gray-700 dark:bg-gray-800 dark:text-white" required>
+                <option value="" {{if eq .Form.Type ""}}selected{{end}}>Select type</option>
+                <option value="A" {{if eq .Form.Type "A"}}selected{{end}}>A</option>
+                <option value="AAAA" {{if eq .Form.Type "AAAA"}}selected{{end}}>AAAA</option>
+                <option value="CAA" {{if eq .Form.Type "CAA"}}selected{{end}}>CAA</option>
+                <option value="CNAME" {{if eq .Form.Type "CNAME"}}selected{{end}}>CNAME</option>
+                <option value="MX" {{if eq .Form.Type "MX"}}selected{{end}}>MX</option>
+                <option value="NS" {{if eq .Form.Type "NS"}}selected{{end}}>NS</option>
+                <option value="PTR" {{if eq .Form.Type "PTR"}}selected{{end}}>PTR</option>
+                <option value="SOA" {{if eq .Form.Type "SOA"}}selected{{end}}>SOA</option>
+                <option value="SRV" {{if eq .Form.Type "SRV"}}selected{{end}}>SRV</option>
+                <option value="TXT" {{if eq .Form.Type "TXT"}}selected{{end}}>TXT</option>
+            </select>
+        </div>
+        <div>
+            <label class="block mb-1 font-medium" for="record_ttl">TTL</label>
+            <input id="record_ttl" name="ttl" type="number" min="1" value="{{.Form.TTL}}" class="w-full rounded border border-gray-300 bg-white p-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white" placeholder="3600">
+        </div>
+        <div>
+            <label class="block mb-1 font-medium" for="record_content">Content</label>
+            <input id="record_content" name="content" type="text" value="{{.Form.Content}}" class="w-full rounded border border-gray-300 bg-white p-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white" placeholder="1.2.3.4" required>
+            <p id="record-type-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400"></p>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Use the full record value, e.g. 10 mail.example.com. for MX or "v=spf1 ..." for TXT.</p>
+        </div>
+        <div class="md:col-span-2 flex items-center justify-end gap-3">
+            <button type="submit" class="rounded bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700">Add Record</button>
+        </div>
+    </form>
+</section>
+
 {{if .Zone}}
     {{if .Zone.RRsets}}
     <div class="space-y-4">
         {{range .Zone.RRsets}}
+        {{ $rrset := . }}
         <section class="bg-white dark:bg-gray-800 shadow rounded p-4">
             <div class="flex items-center justify-between">
                 <div>
                     <h2 class="text-lg font-semibold">{{.Name}}</h2>
                     <p class="text-sm text-gray-600 dark:text-gray-300">{{.Type}} • TTL {{.TTL}}</p>
                 </div>
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{len .Records}} records</span>
+                <div class="flex items-center gap-3">
+                    <span class="text-xs text-gray-500 dark:text-gray-400">{{len .Records}} records</span>
+                    <form method="POST" action="/zones/{{$.ServerID}}/{{$.ZoneID}}/records/delete" onsubmit="return confirm('Delete all {{.Type}} records for {{.Name}}?');">
+                        <input type="hidden" name="name" value="{{.Name}}">
+                        <input type="hidden" name="type" value="{{.Type}}">
+                        <button type="submit" class="text-sm text-red-600 hover:underline dark:text-red-400">Delete</button>
+                    </form>
+                </div>
             </div>
             <div class="mt-3 overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -35,6 +88,7 @@
                         <tr>
                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Content</th>
                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                            <th class="px-4 py-2"></th>
                         </tr>
                     </thead>
                     <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -47,6 +101,33 @@
                                 {{else}}
                                 <span class="text-green-600 dark:text-green-300">Active</span>
                                 {{end}}
+                            </td>
+                            <td class="px-4 py-2 text-right">
+                                <form method="POST" action="/zones/{{$.ServerID}}/{{$.ZoneID}}/records/delete" onsubmit="return confirm('Delete record {{.Content}}?');">
+                                    <input type="hidden" name="name" value="{{$rrset.Name}}">
+                                    <input type="hidden" name="type" value="{{$rrset.Type}}">
+                                    <input type="hidden" name="content" value="{{.Content}}">
+                                    <button type="submit" class="text-sm text-red-600 hover:underline dark:text-red-400">Delete record</button>
+                                </form>
+                                <details class="mt-1">
+                                    <summary class="text-xs text-indigo-600 cursor-pointer dark:text-indigo-400">Edit</summary>
+                                    <form method="POST" action="/zones/{{$.ServerID}}/{{$.ZoneID}}/records/update" class="mt-2 space-y-2">
+                                        <input type="hidden" name="name" value="{{$rrset.Name}}">
+                                        <input type="hidden" name="type" value="{{$rrset.Type}}">
+                                        <input type="hidden" name="old_value" value="{{.Content}}">
+                                        <div>
+                                            <label class="block text-xs text-gray-500 dark:text-gray-400">New value</label>
+                                            <input name="new_value" type="text" value="{{.Content}}" data-record-type-input="{{$rrset.Type}}" class="w-full rounded border border-gray-300 bg-white p-2 text-xs dark:border-gray-700 dark:bg-gray-800 dark:text-white" required>
+                                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" data-record-type-hint></p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs text-gray-500 dark:text-gray-400">TTL override</label>
+                                            <input name="ttl" type="number" min="1" class="w-full rounded border border-gray-300 bg-white p-2 text-xs dark:border-gray-700 dark:bg-gray-800 dark:text-white" placeholder="{{$rrset.TTL}}">
+                                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Applies to all records in this set.</p>
+                                        </div>
+                                        <button type="submit" class="rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-700">Update</button>
+                                    </form>
+                                </details>
                             </td>
                         </tr>
                         {{end}}
@@ -64,3 +145,42 @@
     <p class="text-gray-600 dark:text-gray-300">Zone not found.</p>
 {{end}}
 {{end}}
+
+<script>
+    const recordTypeHints = {
+        A: { placeholder: "1.2.3.4", hint: "IPv4 address." },
+        AAAA: { placeholder: "2001:db8::1", hint: "IPv6 address." },
+        CAA: { placeholder: "0 issue \"letsencrypt.org\"", hint: "flag tag value." },
+        CNAME: { placeholder: "target.example.com.", hint: "Target FQDN ending with a dot." },
+        MX: { placeholder: "10 mail.example.com.", hint: "Priority and target FQDN ending with a dot." },
+        NS: { placeholder: "ns1.example.com.", hint: "Nameserver FQDN ending with a dot." },
+        PTR: { placeholder: "host.example.com.", hint: "Target FQDN ending with a dot." },
+        SRV: { placeholder: "10 5 443 target.example.com.", hint: "Priority weight port target FQDN ending with a dot." },
+        TXT: { placeholder: "\"v=spf1 include:...\"", hint: "Text value; quotes optional." },
+    };
+
+    const applyRecordHint = (recordType, inputEl, hintEl) => {
+        const config = recordTypeHints[recordType] || { placeholder: "", hint: "Select a record type to see the expected format." };
+        if (inputEl && config.placeholder) {
+            inputEl.placeholder = config.placeholder;
+        }
+        if (hintEl) {
+            hintEl.textContent = config.hint || "";
+        }
+    };
+
+    const typeSelect = document.getElementById("record_type");
+    const contentInput = document.getElementById("record_content");
+    const typeHint = document.getElementById("record-type-hint");
+    if (typeSelect && contentInput && typeHint) {
+        const updateAddHint = () => applyRecordHint(typeSelect.value, contentInput, typeHint);
+        typeSelect.addEventListener("change", updateAddHint);
+        updateAddHint();
+    }
+
+    document.querySelectorAll("[data-record-type-input]").forEach((input) => {
+        const recordType = input.dataset.recordTypeInput;
+        const hintEl = input.parentElement.querySelector("[data-record-type-hint]");
+        applyRecordHint(recordType, input, hintEl);
+    });
+</script>
