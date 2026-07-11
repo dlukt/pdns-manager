@@ -12,6 +12,14 @@ PNPM        := pnpm
 PDNS_API_URL ?= http://localhost:8081/api/v1
 PDNS_API_KEY ?= dev-secret-key
 
+# Local Mailpit mail catcher (SMTP on 1025, web UI on 8025). The app's SMTP
+# mailer activates when --smtp-addr and --mail-from are set (cmd/start.go); the
+# credentials must match Mailpit's MP_SMTP_AUTH_LOGIN in docker-compose.dev.yml.
+SMTP_ADDR ?= localhost:1025
+MAIL_FROM ?= pdns-manager@localhost
+SMTP_USER ?= devmail
+SMTP_PASS ?= devpass
+
 .DEFAULT_GOAL := help
 
 .PHONY: dev-up dev-down dev-restart dev-logs dev-clean dev-psql dev-run
@@ -38,7 +46,7 @@ dev-psql: ## Open a psql shell in the dev PostgreSQL container (app database)
 	$(COMPOSE) exec postgres psql -U postgres -d postgres
 
 dev-run: ## Run the app on the host against the dev infrastructure
-	PDNS_API_URL=$(PDNS_API_URL) PDNS_API_KEY=$(PDNS_API_KEY) $(GO) run . start
+	PDNS_API_URL=$(PDNS_API_URL) PDNS_API_KEY=$(PDNS_API_KEY) $(GO) run . start --smtp-addr=$(SMTP_ADDR) --smtp-user=$(SMTP_USER) --smtp-pass=$(SMTP_PASS) --mail-from=$(MAIL_FROM)
 
 ## Go / frontend helpers
 

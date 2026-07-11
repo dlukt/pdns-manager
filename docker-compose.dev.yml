@@ -64,5 +64,24 @@ services:
     # creating the `pdns` database and loading its schema.
     restart: unless-stopped
 
+  mailpit:
+    # Local mail catcher: captures emails the app sends (verification, password
+    # reset) so they can be viewed in a web UI instead of just being logged.
+    image: axllent/mailpit
+    container_name: pdns-manager-mailpit
+    environment:
+      # Enable SMTP AUTH (advertises AUTH PLAIN/LOGIN) and accept any
+      # credentials. The app's mailer always performs smtp.PlainAuth, so it
+      # needs a server that advertises AUTH; the credentials it sends
+      # (SMTP_USER/SMTP_PASS in the Makefile) are accepted as-is.
+      # ALLOW_INSECURE is needed because the app connects without TLS over
+      # localhost (Mailpit otherwise requires STARTTLS for auth). Dev only.
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    ports:
+      - "8025:8025"   # web UI
+      - "1025:1025"   # SMTP (the app on the host sends to localhost:1025)
+    restart: unless-stopped
+
 volumes:
   postgres-data:
