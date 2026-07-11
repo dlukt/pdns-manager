@@ -50,8 +50,6 @@ var startCmd = &cobra.Command{
 		}
 		pdnsURL = ensureSetting(ctx, client, "pdns_api_url", pdnsURL)
 		pdnsKey = ensureSetting(ctx, client, "pdns_api_key", pdnsKey)
-		config.SetPDNSAPIURL(pdnsURL)
-		config.SetPDNSAPIKey(pdnsKey)
 		var pdnsClient *pdns.Client
 		if pdnsURL != "" {
 			var err error
@@ -70,6 +68,7 @@ var startCmd = &cobra.Command{
 			mailer = auth.NewSMTPMailer(smtpAddr, smtpUser, smtpPass, mailFrom)
 		}
 		sessions := session.NewStore(key)
+		// NewHandler treats a nil *pdns.Client as unconfigured (typed-nil safe).
 		mux := web.NewHandler(client, auth.NewService(client, mailer), sessions, pdnsClient)
 		fmt.Println("listening on :8080")
 		if err := http.ListenAndServe(":8080", mux); err != nil && err != http.ErrServerClosed {
@@ -96,17 +95,26 @@ func init() {
 	rootCmd.AddCommand(startCmd)
 }
 
-// ensureSetting ensures that a settings entry with the given key exists. If
-// value is empty it reads the existing value from the database. Otherwise it
-// stores the provided value.
+// ensureSetting returns the stored value for a settings key, creating the row
+// from value if it does not exist. A stored non-empty value is authoritative
+// and is returned unchanged (it may have been set via the web UI and must
+// survive restarts); value (flag/env) only seeds the row when the stored value
+// is empty.
 func ensureSetting(ctx context.Context, client *ent.Client, key, value string) string {
 	s, err := client.Settings.Query().Where(settings.KeyEQ(key)).Only(ctx)
 	switch {
 	case err == nil:
-		if value == "" {
+		// A stored, non-empty value is authoritative: it may have been set via
+		// the web UI and must survive restarts. The flag/env value only seeds
+		// the setting when the stored value is empty, so it never silently
+		// reverts an admin's edit on the next start.
+		if s.Value != "" {
+			if value != "" && value != s.Value {
+				log.Printf("settings: ignoring %s from flag/env; using stored value", key)
+			}
 			return s.Value
 		}
-		if s.Value != value {
+		if value != "" {
 			if _, err := client.Settings.UpdateOneID(s.ID).SetValue(value).Save(ctx); err != nil {
 				log.Fatalf("failed updating %s: %v", key, err)
 			}

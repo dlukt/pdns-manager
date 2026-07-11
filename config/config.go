@@ -1,15 +1,13 @@
-// Package config centralizes application configuration on top of Viper.
+// Package config resolves application configuration at boot time via Viper.
 //
-// Values resolve with Viper precedence: explicit Set > flag > env var > default.
-// Env var names mirror the keys with "." replaced by "_" and uppercased, e.g.
-// "smtp.addr" -> SMTP_ADDR, "pdns.api.url" -> PDNS_API_URL, "dsn" -> DSN. There
-// is no env prefix, so the names match the historical env vars exactly.
+// Values resolve with Viper precedence: flag > env var > default. Env var names
+// mirror the keys with "." replaced by "_" and uppercased, e.g. "smtp.addr" ->
+// SMTP_ADDR, "pdns.api.url" -> PDNS_API_URL, "dsn" -> DSN. There is no env
+// prefix, so the names match the historical env vars exactly.
 //
-// The package owns a private Viper instance and guards all access with an
-// RWMutex. This is required because some settings (the PowerDNS API URL/key) are
-// mutated at runtime from concurrent HTTP handlers (see SetPDNSAPIURL/Key), and
-// Viper's own maps are not safe for concurrent use. All Viper access in this
-// process goes through this package.
+// This package is read only at boot; it is not mutated at runtime. The
+// runtime-mutable PowerDNS connection lives in package web (pdnsClientHolder),
+// so no locking is needed here.
 package config
 
 import (
@@ -36,9 +34,8 @@ const (
 const DefaultDSN = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
 
 var (
-	v         *viper.Viper
-	once      sync.Once
-	accessMu  sync.RWMutex
+	v    *viper.Viper
+	once sync.Once
 )
 
 // setup initializes the private Viper instance: env var binding (key -> env,
@@ -59,8 +56,6 @@ func setup() {
 // a bind error panics at startup rather than silently dropping the binding.
 func BindFlag(key string, flag *pflag.Flag) {
 	setup()
-	accessMu.Lock()
-	defer accessMu.Unlock()
 	if flag == nil {
 		panic(fmt.Sprintf("config: nil flag for key %q (flag name typo?)", key))
 	}
@@ -69,7 +64,7 @@ func BindFlag(key string, flag *pflag.Flag) {
 	}
 }
 
-// Resolved accessors (flag > env > default).
+// Resolved accessors (flag > env > default), read at boot.
 
 func DSN() string        { return get(KeyDSN) }
 func SMTPAddr() string   { return get(KeySMTPAddr) }
@@ -81,20 +76,5 @@ func PDNSAPIKey() string { return get(KeyPDNSAPIKey) }
 
 func get(key string) string {
 	setup()
-	accessMu.RLock()
-	defer accessMu.RUnlock()
 	return v.GetString(key)
-}
-
-// SetPDNSAPIURL / SetPDNSAPIKey update the PowerDNS API settings at runtime
-// (e.g. when the server-settings page changes them). Explicit Set has the
-// highest precedence. Mutex-guarded for concurrent HTTP-handler access.
-func SetPDNSAPIURL(val string) { set(KeyPDNSAPIURL, val) }
-func SetPDNSAPIKey(val string) { set(KeyPDNSAPIKey, val) }
-
-func set(key, value string) {
-	setup()
-	accessMu.Lock()
-	defer accessMu.Unlock()
-	v.Set(key, value)
 }

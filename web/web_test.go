@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/dlukt/pdns-manager/pdns"
@@ -110,7 +111,7 @@ func TestListZonesHappyPath(t *testing.T) {
 			"srv2": {{ID: "example.com.", Name: "example.com.", Kind: "Native", Type: "Zone", Serial: 2025010101}},
 		},
 	}
-	h := &handler{pdnsClient: stub}
+	h := &handler{pdnsHolder: &pdnsClientHolder{c: stub}}
 	req := httptest.NewRequest(http.MethodGet, "/zones?server=srv2", nil)
 	res := httptest.NewRecorder()
 
@@ -130,7 +131,7 @@ func TestListZonesHappyPath(t *testing.T) {
 
 func TestListZonesServerError(t *testing.T) {
 	stub := &stubPDNSClient{errServers: errors.New("boom")}
-	h := &handler{pdnsClient: stub}
+	h := &handler{pdnsHolder: &pdnsClientHolder{c: stub}}
 	req := httptest.NewRequest(http.MethodGet, "/zones", nil)
 	res := httptest.NewRecorder()
 
@@ -148,7 +149,7 @@ func TestPostZoneCreateRedirectsToZones(t *testing.T) {
 	stub := &stubPDNSClient{
 		servers: []pdns.Server{{ID: "srv1"}},
 	}
-	h := &handler{pdnsClient: stub, zoneKinds: []string{"Native", "Master", "Slave"}}
+	h := &handler{pdnsHolder: &pdnsClientHolder{c: stub}, zoneKinds: []string{"Native", "Master", "Slave"}}
 	form := url.Values{
 		"server_id": {"srv1"},
 		"name":      {"example.com."},
@@ -190,7 +191,7 @@ func TestPostZoneCreateRedirectsToZones(t *testing.T) {
 
 func TestPostZoneDeleteRedirectsToZones(t *testing.T) {
 	stub := &stubPDNSClient{}
-	h := &handler{pdnsClient: stub}
+	h := &handler{pdnsHolder: &pdnsClientHolder{c: stub}}
 	req := httptest.NewRequest(http.MethodPost, "/zones/srv1/example.com./delete", nil)
 	req.SetPathValue("serverID", "srv1")
 	req.SetPathValue("zoneID", "example.com.")
@@ -234,7 +235,7 @@ func TestGetSearchCallsSearchData(t *testing.T) {
 			TTL:     300,
 		}},
 	}
-	h := &handler{pdnsClient: stub}
+	h := &handler{pdnsHolder: &pdnsClientHolder{c: stub}}
 	req := httptest.NewRequest(http.MethodGet, "/search?server=srv2&q=example&max=25&object_type=record", nil)
 	res := httptest.NewRecorder()
 
@@ -278,7 +279,7 @@ func TestGetZoneRecordsRendersRRsets(t *testing.T) {
 			}},
 		},
 	}
-	h := &handler{pdnsClient: stub}
+	h := &handler{pdnsHolder: &pdnsClientHolder{c: stub}}
 	req := httptest.NewRequest(http.MethodGet, "/zones/srv1/example.com./", nil)
 	req.SetPathValue("serverID", "srv1")
 	req.SetPathValue("zoneID", "example.com.")
@@ -311,7 +312,7 @@ func TestPostZoneRecordAddCreatesRRset(t *testing.T) {
 			Name: "example.com.",
 		},
 	}
-	h := &handler{pdnsClient: stub}
+	h := &handler{pdnsHolder: &pdnsClientHolder{c: stub}}
 	form := url.Values{
 		"name":    {"www.example.com"},
 		"type":    {"A"},
@@ -372,7 +373,7 @@ func TestPostZoneRecordAddAppendsToExistingRRset(t *testing.T) {
 			}},
 		},
 	}
-	h := &handler{pdnsClient: stub}
+	h := &handler{pdnsHolder: &pdnsClientHolder{c: stub}}
 	form := url.Values{
 		"name":    {"www.example.com"},
 		"type":    {"A"},
@@ -421,7 +422,7 @@ func TestPostZoneRecordDeleteSingleRecord(t *testing.T) {
 			}},
 		},
 	}
-	h := &handler{pdnsClient: stub}
+	h := &handler{pdnsHolder: &pdnsClientHolder{c: stub}}
 	form := url.Values{
 		"name":    {"www.example.com."},
 		"type":    {"A"},
@@ -466,7 +467,7 @@ func TestPostZoneRecordUpdateReplacesContent(t *testing.T) {
 			}},
 		},
 	}
-	h := &handler{pdnsClient: stub}
+	h := &handler{pdnsHolder: &pdnsClientHolder{c: stub}}
 	form := url.Values{
 		"name":      {"www.example.com."},
 		"type":      {"A"},
@@ -513,7 +514,7 @@ func TestPostZoneRecordDeleteRemovesRRset(t *testing.T) {
 			}},
 		},
 	}
-	h := &handler{pdnsClient: stub}
+	h := &handler{pdnsHolder: &pdnsClientHolder{c: stub}}
 	form := url.Values{
 		"name": {"www.example.com."},
 		"type": {"A"},
@@ -539,4 +540,73 @@ func TestPostZoneRecordDeleteRemovesRRset(t *testing.T) {
 	if rrset.Name != "www.example.com." {
 		t.Fatalf("expected rrset name to be www.example.com., got %q", rrset.Name)
 	}
+}
+
+// TestPDNSClientSwap verifies that setPDNS replaces the live client, so changes
+// made on the server-settings page take effect without a restart (#3).
+func TestPDNSClientSwap(t *testing.T) {
+	a := &stubPDNSClient{}
+	b := &stubPDNSClient{}
+	h := &handler{pdnsHolder: &pdnsClientHolder{c: a}}
+	if h.pdns() != a {
+		t.Fatal("pdns() does not return the initial client")
+	}
+	h.setPDNS(b)
+	if h.pdns() != b {
+		t.Fatal("setPDNS did not replace the live client")
+	}
+	// A handler with no holder must report unconfigured rather than panic.
+	h2 := &handler{}
+	if h2.pdns() != nil {
+		t.Fatal("pdns() should be nil when no holder is set")
+	}
+}
+
+// TestRenderZoneRecordActionNilClient is a regression guard: rendering a
+// zone-record action while PowerDNS is unconfigured (client == nil) must not
+// panic, even when view.Zone is nil (#1).
+func TestRenderZoneRecordActionNilClient(t *testing.T) {
+	h := &handler{} // no pdnsHolder -> h.pdns() returns nil
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	h.renderZoneRecordAction(rec, req, recordActionView{
+		Title: "Zone Records", ServerID: "s", ZoneID: "z",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body=%q)", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "PowerDNS client not configured") {
+		t.Fatalf("expected nil-client message in body, got %q", rec.Body.String())
+	}
+}
+
+// TestNormalizeClient guards NewHandler's typed-nil handling: a nil *pdns.Client
+// (which arrives as a non-nil typed-nil interface) must normalize to a genuine
+// nil so handlers' == nil guards work.
+func TestNormalizeClient(t *testing.T) {
+	var nilClient *pdns.Client
+	if normalizeClient(nilClient) != nil {
+		t.Fatal("typed-nil *pdns.Client should normalize to nil")
+	}
+	stub := &stubPDNSClient{}
+	if normalizeClient(stub) != stub {
+		t.Fatal("non-nil client should pass through unchanged")
+	}
+	if normalizeClient(nil) != nil {
+		t.Fatal("nil should stay nil")
+	}
+}
+
+// TestHolderConcurrentSwapRead exercises the holder under concurrent swap vs
+// read so the race detector validates its locking.
+func TestHolderConcurrentSwapRead(t *testing.T) {
+	h := &handler{pdnsHolder: &pdnsClientHolder{c: &stubPDNSClient{}}}
+	other := &stubPDNSClient{}
+	var wg sync.WaitGroup
+	for i := 0; i < 200; i++ {
+		wg.Add(2)
+		go func() { defer wg.Done(); h.setPDNS(other) }()
+		go func() { defer wg.Done(); _ = h.pdns() }()
+	}
+	wg.Wait()
 }

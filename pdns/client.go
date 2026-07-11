@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // Client provides access to the PowerDNS Authoritative HTTP API.
@@ -18,11 +19,33 @@ type Client struct {
 	http     *http.Client
 }
 
+// defaultHTTPClient returns an *http.Client with a bounded timeout and a
+// redirect policy that never forwards the X-API-Key header to a different host.
+func defaultHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// Compare hostname (not Host, which includes the port) so a same-host
+			// port change such as http -> https:443 is still allowed.
+			if len(via) > 0 && req.URL.Hostname() != via[0].URL.Hostname() {
+				// Refuse cross-host redirects so the API key is never leaked.
+				return http.ErrUseLastResponse
+			}
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			return nil
+		},
+	}
+}
+
 // NewClient creates a new API client. The endpoint should include the
-// base path of the API, for example "http://localhost:8081/api/v1".
+// base path of the API, for example "http://localhost:8081/api/v1". When
+// httpClient is nil the client uses a safe default: a 30s timeout and a
+// redirect policy that never forwards the API key to another host.
 func NewClient(endpoint, apiKey string, httpClient *http.Client) (*Client, error) {
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = defaultHTTPClient()
 	}
 	u, err := url.Parse(endpoint)
 	if err != nil {

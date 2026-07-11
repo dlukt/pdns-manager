@@ -7,16 +7,17 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"log"
 	"net"
 	"net/http"
 	"net/mail"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/dlukt/pdns-manager/auth"
-	"github.com/dlukt/pdns-manager/config"
 	"github.com/dlukt/pdns-manager/ent"
 	"github.com/dlukt/pdns-manager/ent/settings"
 	"github.com/dlukt/pdns-manager/pdns"
@@ -90,7 +91,7 @@ type handler struct {
 	auth       *auth.Service
 	sessions   *session.Store
 	client     *ent.Client
-	pdnsClient pdnsClient
+	pdnsHolder *pdnsClientHolder
 	zoneKinds  []string
 }
 
@@ -106,9 +107,55 @@ type pdnsClient interface {
 	ModifyRRsets(ctx context.Context, serverID, zoneID string, rrsets []pdns.RRSet) error
 }
 
+// pdnsClientHolder guards the current PowerDNS client so it can be swapped at
+// runtime (for example when the server settings change) without a data race.
+// Once configured it is only ever replaced with another non-nil client, so a
+// caller that observed a non-nil client cannot later observe nil.
+type pdnsClientHolder struct {
+	mu sync.RWMutex
+	c  pdnsClient
+}
+
+func (h *pdnsClientHolder) load() pdnsClient {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.c
+}
+
+func (h *pdnsClientHolder) store(c pdnsClient) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.c = c
+}
+
+// pdns returns the current PowerDNS client, or nil if none is configured.
+func (h *handler) pdns() pdnsClient {
+	if h.pdnsHolder == nil {
+		return nil
+	}
+	return h.pdnsHolder.load()
+}
+
+// setPDNS replaces the current PowerDNS client at runtime.
+func (h *handler) setPDNS(c pdnsClient) {
+	if h.pdnsHolder == nil {
+		h.pdnsHolder = &pdnsClientHolder{}
+	}
+	h.pdnsHolder.store(c)
+}
+
+// normalizeClient treats a typed-nil *pdns.Client as a genuine nil so the
+// unconfigured state is detectable with == nil in handlers.
+func normalizeClient(p pdnsClient) pdnsClient {
+	if pc, ok := p.(*pdns.Client); ok && pc == nil {
+		return nil
+	}
+	return p
+}
+
 // NewHandler returns an http.Handler with application routes.
 func NewHandler(c *ent.Client, a *auth.Service, s *session.Store, p pdnsClient) http.Handler {
-	h := &handler{auth: a, sessions: s, client: c, pdnsClient: p, zoneKinds: []string{"Native", "Master", "Slave"}}
+	h := &handler{auth: a, sessions: s, client: c, pdnsHolder: &pdnsClientHolder{c: normalizeClient(p)}, zoneKinds: []string{"Native", "Master", "Slave"}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", h.index)
 	mux.HandleFunc("GET /zones", h.listZones)
@@ -179,7 +226,7 @@ func (h *handler) currentUser(r *http.Request) (*ent.User, error) {
 }
 
 func (h *handler) index(w http.ResponseWriter, r *http.Request) {
-	if h.pdnsClient != nil {
+	if h.pdns() != nil {
 		http.Redirect(w, r, "/zones", http.StatusFound)
 		return
 	}
@@ -377,7 +424,8 @@ func (h *handler) postProfileEmail(w http.ResponseWriter, r *http.Request) {
 	h.renderProfile(w, view)
 }
 func (h *handler) listZones(w http.ResponseWriter, r *http.Request) {
-	if h.pdnsClient == nil {
+	c := h.pdns()
+	if c == nil {
 		http.Error(w, "PowerDNS client not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -385,7 +433,7 @@ func (h *handler) listZones(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	successMsg := q.Get("success")
 	errorMsg := q.Get("error")
-	servers, err := h.pdnsClient.ListServers(ctx)
+	servers, err := c.ListServers(ctx)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to load servers: %v", err), http.StatusBadGateway)
 		return
@@ -413,7 +461,7 @@ func (h *handler) listZones(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	zones, err := h.pdnsClient.ListZones(ctx, selected)
+	zones, err := c.ListZones(ctx, selected)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to load zones: %v", err), http.StatusBadGateway)
 		return
@@ -433,12 +481,13 @@ func (h *handler) listZones(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) getSearch(w http.ResponseWriter, r *http.Request) {
 	data := searchView{Title: "Global Search"}
-	if h.pdnsClient == nil {
+	c := h.pdns()
+	if c == nil {
 		data.Error = "PowerDNS client not configured"
 		h.renderSearch(w, data)
 		return
 	}
-	servers, err := h.listServers(r)
+	servers, err := listServers(r.Context(), c)
 	if err != nil {
 		data.Error = err.Error()
 		h.renderSearch(w, data)
@@ -483,7 +532,7 @@ func (h *handler) getSearch(w http.ResponseWriter, r *http.Request) {
 	data.SelectedServerID = selected
 
 	if data.Query != "" {
-		results, err := h.pdnsClient.SearchData(r.Context(), selected, data.Query, data.Max, data.ObjectType)
+		results, err := c.SearchData(r.Context(), selected, data.Query, data.Max, data.ObjectType)
 		if err != nil {
 			data.Error = err.Error()
 		} else {
@@ -515,14 +564,15 @@ func (h *handler) getZoneRecords(w http.ResponseWriter, r *http.Request) {
 		Success:  successMsg,
 		Error:    errorMsg,
 	}
-	if h.pdnsClient == nil {
+	c := h.pdns()
+	if c == nil {
 		if data.Error == "" {
 			data.Error = "PowerDNS client not configured"
 		}
 		h.renderZoneRecords(w, data)
 		return
 	}
-	servers, err := h.listServers(r)
+	servers, err := listServers(r.Context(), c)
 	if err != nil {
 		if data.Error == "" {
 			data.Error = err.Error()
@@ -534,7 +584,7 @@ func (h *handler) getZoneRecords(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	zone, err := h.pdnsClient.GetZone(r.Context(), serverID, zoneID)
+	zone, err := c.GetZone(r.Context(), serverID, zoneID)
 	if err != nil {
 		if data.Error == "" {
 			data.Error = err.Error()
@@ -629,12 +679,13 @@ func (h *handler) postZoneRecordAdd(w http.ResponseWriter, r *http.Request) {
 		h.renderZoneRecordAction(w, r, data)
 		return
 	}
-	if h.pdnsClient == nil {
+	c := h.pdns()
+	if c == nil {
 		data.Error = "PowerDNS client not configured"
 		h.renderZoneRecordAction(w, r, data)
 		return
 	}
-	zone, err := h.pdnsClient.GetZone(r.Context(), serverID, zoneID)
+	zone, err := c.GetZone(r.Context(), serverID, zoneID)
 	if err != nil {
 		data.Error = err.Error()
 		h.renderZoneRecordAction(w, r, data)
@@ -673,7 +724,7 @@ func (h *handler) postZoneRecordAdd(w http.ResponseWriter, r *http.Request) {
 		Changetype: "REPLACE",
 		Records:    records,
 	}
-	if err := h.pdnsClient.ModifyRRsets(r.Context(), serverID, zoneID, []pdns.RRSet{rrset}); err != nil {
+	if err := c.ModifyRRsets(r.Context(), serverID, zoneID, []pdns.RRSet{rrset}); err != nil {
 		data.Error = err.Error()
 		h.renderZoneRecordAction(w, r, data)
 		return
@@ -705,13 +756,14 @@ func (h *handler) postZoneRecordDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unsupported record type", http.StatusBadRequest)
 		return
 	}
-	if h.pdnsClient == nil {
+	c := h.pdns()
+	if c == nil {
 		params := url.Values{}
 		params.Set("error", "PowerDNS client not configured")
 		http.Redirect(w, r, "/zones/"+url.PathEscape(serverID)+"/"+url.PathEscape(zoneID)+"?"+params.Encode(), http.StatusFound)
 		return
 	}
-	zone, err := h.pdnsClient.GetZone(r.Context(), serverID, zoneID)
+	zone, err := c.GetZone(r.Context(), serverID, zoneID)
 	if err != nil {
 		params := url.Values{}
 		params.Set("error", err.Error())
@@ -755,7 +807,7 @@ func (h *handler) postZoneRecordDelete(w http.ResponseWriter, r *http.Request) {
 				Changetype: "DELETE",
 				Records:    []pdns.Record{},
 			}
-			if err := h.pdnsClient.ModifyRRsets(r.Context(), serverID, zoneID, []pdns.RRSet{rrsetDelete}); err != nil {
+			if err := c.ModifyRRsets(r.Context(), serverID, zoneID, []pdns.RRSet{rrsetDelete}); err != nil {
 				params := url.Values{}
 				params.Set("error", err.Error())
 				http.Redirect(w, r, "/zones/"+url.PathEscape(serverID)+"/"+url.PathEscape(zoneID)+"?"+params.Encode(), http.StatusFound)
@@ -773,7 +825,7 @@ func (h *handler) postZoneRecordDelete(w http.ResponseWriter, r *http.Request) {
 			Changetype: "REPLACE",
 			Records:    remaining,
 		}
-		if err := h.pdnsClient.ModifyRRsets(r.Context(), serverID, zoneID, []pdns.RRSet{rrsetReplace}); err != nil {
+		if err := c.ModifyRRsets(r.Context(), serverID, zoneID, []pdns.RRSet{rrsetReplace}); err != nil {
 			params := url.Values{}
 			params.Set("error", err.Error())
 			http.Redirect(w, r, "/zones/"+url.PathEscape(serverID)+"/"+url.PathEscape(zoneID)+"?"+params.Encode(), http.StatusFound)
@@ -796,7 +848,7 @@ func (h *handler) postZoneRecordDelete(w http.ResponseWriter, r *http.Request) {
 		Changetype: "DELETE",
 		Records:    []pdns.Record{},
 	}
-	if err := h.pdnsClient.ModifyRRsets(r.Context(), serverID, zoneID, []pdns.RRSet{rrset}); err != nil {
+	if err := c.ModifyRRsets(r.Context(), serverID, zoneID, []pdns.RRSet{rrset}); err != nil {
 		params := url.Values{}
 		params.Set("error", err.Error())
 		http.Redirect(w, r, "/zones/"+url.PathEscape(serverID)+"/"+url.PathEscape(zoneID)+"?"+params.Encode(), http.StatusFound)
@@ -845,13 +897,14 @@ func (h *handler) postZoneRecordUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/zones/"+url.PathEscape(serverID)+"/"+url.PathEscape(zoneID)+"?"+params.Encode(), http.StatusFound)
 		return
 	}
-	if h.pdnsClient == nil {
+	c := h.pdns()
+	if c == nil {
 		params := url.Values{}
 		params.Set("error", "PowerDNS client not configured")
 		http.Redirect(w, r, "/zones/"+url.PathEscape(serverID)+"/"+url.PathEscape(zoneID)+"?"+params.Encode(), http.StatusFound)
 		return
 	}
-	zone, err := h.pdnsClient.GetZone(r.Context(), serverID, zoneID)
+	zone, err := c.GetZone(r.Context(), serverID, zoneID)
 	if err != nil {
 		params := url.Values{}
 		params.Set("error", err.Error())
@@ -908,7 +961,7 @@ func (h *handler) postZoneRecordUpdate(w http.ResponseWriter, r *http.Request) {
 		Changetype: "REPLACE",
 		Records:    updatedRecords,
 	}
-	if err := h.pdnsClient.ModifyRRsets(r.Context(), serverID, zoneID, []pdns.RRSet{updatedRRset}); err != nil {
+	if err := c.ModifyRRsets(r.Context(), serverID, zoneID, []pdns.RRSet{updatedRRset}); err != nil {
 		params := url.Values{}
 		params.Set("error", err.Error())
 		http.Redirect(w, r, "/zones/"+url.PathEscape(serverID)+"/"+url.PathEscape(zoneID)+"?"+params.Encode(), http.StatusFound)
@@ -921,11 +974,17 @@ func (h *handler) postZoneRecordUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) renderZoneRecordAction(w http.ResponseWriter, r *http.Request, view recordActionView) {
 	if view.Zone == nil {
-		zone, err := h.pdnsClient.GetZone(r.Context(), view.ServerID, view.ZoneID)
-		if err != nil {
-			view.Error = err.Error()
-		} else {
-			view.Zone = zone
+		if c := h.pdns(); c != nil {
+			zone, err := c.GetZone(r.Context(), view.ServerID, view.ZoneID)
+			if err != nil {
+				if view.Error == "" {
+					view.Error = err.Error()
+				}
+			} else {
+				view.Zone = zone
+			}
+		} else if view.Error == "" {
+			view.Error = "PowerDNS client not configured"
 		}
 	}
 	if view.Form.TTL == "" {
@@ -1112,7 +1171,8 @@ func (h *handler) getZoneNew(w http.ResponseWriter, r *http.Request) {
 		},
 		Kinds: h.zoneKinds,
 	}
-	servers, err := h.listServers(r)
+	c := h.pdns()
+	servers, err := listServers(r.Context(), c)
 	if err != nil {
 		data.Error = err.Error()
 	} else {
@@ -1141,7 +1201,8 @@ func (h *handler) postZoneCreate(w http.ResponseWriter, r *http.Request) {
 		Form:        form,
 		Kinds:       h.zoneKinds,
 	}
-	servers, err := h.listServers(r)
+	c := h.pdns()
+	servers, err := listServers(r.Context(), c)
 	if err != nil {
 		data.Error = err.Error()
 		h.renderZoneForm(w, data)
@@ -1170,7 +1231,7 @@ func (h *handler) postZoneCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderZoneForm(w, data)
 		return
 	}
-	if h.pdnsClient == nil {
+	if c == nil {
 		data.Error = "PowerDNS client not configured"
 		h.renderZoneForm(w, data)
 		return
@@ -1182,7 +1243,7 @@ func (h *handler) postZoneCreate(w http.ResponseWriter, r *http.Request) {
 	if len(masters) > 0 {
 		zone.Masters = masters
 	}
-	if _, err := h.pdnsClient.CreateZone(r.Context(), form.ServerID, zone); err != nil {
+	if _, err := c.CreateZone(r.Context(), form.ServerID, zone); err != nil {
 		data.Error = err.Error()
 		h.renderZoneForm(w, data)
 		return
@@ -1206,12 +1267,13 @@ func (h *handler) postZoneDelete(w http.ResponseWriter, r *http.Request) {
 	if serverID != "" {
 		params.Set("server", serverID)
 	}
-	if h.pdnsClient == nil {
+	c := h.pdns()
+	if c == nil {
 		params.Set("error", "PowerDNS client is not configured")
 		http.Redirect(w, r, "/zones?"+params.Encode(), http.StatusFound)
 		return
 	}
-	if err := h.pdnsClient.DeleteZone(r.Context(), serverID, zoneID); err != nil {
+	if err := c.DeleteZone(r.Context(), serverID, zoneID); err != nil {
 		params.Set("error", err.Error())
 		http.Redirect(w, r, "/zones?"+params.Encode(), http.StatusFound)
 		return
@@ -1226,11 +1288,12 @@ func (h *handler) renderZoneForm(w http.ResponseWriter, data zonePageData) {
 	}
 }
 
-func (h *handler) listServers(r *http.Request) ([]pdns.Server, error) {
-	if h.pdnsClient == nil {
+// listServers fetches the PowerDNS servers using the given client.
+func listServers(ctx context.Context, c pdnsClient) ([]pdns.Server, error) {
+	if c == nil {
 		return nil, fmt.Errorf("PowerDNS client is not configured")
 	}
-	servers, err := h.pdnsClient.ListServers(r.Context())
+	servers, err := c.ListServers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load servers: %w", err)
 	}
@@ -1430,8 +1493,6 @@ func (h *handler) confirmMail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) getServerSettings(w http.ResponseWriter, r *http.Request) {
-	urlSetting, _ := h.client.Settings.Query().Where(settings.KeyEQ("pdns_api_url")).Only(r.Context())
-	keySetting, _ := h.client.Settings.Query().Where(settings.KeyEQ("pdns_api_key")).Only(r.Context())
 	data := struct {
 		Title      string
 		PDNSAPIURL string
@@ -1439,6 +1500,16 @@ func (h *handler) getServerSettings(w http.ResponseWriter, r *http.Request) {
 		Error      string
 		Message    string
 	}{Title: "Server Settings"}
+	urlSetting, err := h.client.Settings.Query().Where(settings.KeyEQ("pdns_api_url")).Only(r.Context())
+	if err != nil && !ent.IsNotFound(err) {
+		http.Error(w, "failed to load settings: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	keySetting, err := h.client.Settings.Query().Where(settings.KeyEQ("pdns_api_key")).Only(r.Context())
+	if err != nil && !ent.IsNotFound(err) {
+		http.Error(w, "failed to load settings: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if urlSetting != nil {
 		data.PDNSAPIURL = urlSetting.Value
 	}
@@ -1455,8 +1526,8 @@ func (h *handler) postServerSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	pdnsURL := r.FormValue("pdns_api_url")
-	pdnsKey := r.FormValue("pdns_api_key")
+	pdnsURL := strings.TrimSpace(r.FormValue("pdns_api_url"))
+	pdnsKey := strings.TrimSpace(r.FormValue("pdns_api_key"))
 	data := struct {
 		Title      string
 		PDNSAPIURL string
@@ -1471,35 +1542,66 @@ func (h *handler) postServerSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if strings.TrimSpace(pdnsKey) == "" {
+	if pdnsKey == "" {
 		data.Error = "API key required"
 		if err := tmpl["settings/server.html"].Execute(w, data); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
-	if n, err := h.client.Settings.Update().Where(settings.KeyEQ("pdns_api_url")).SetValue(pdnsURL).Save(r.Context()); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	// Build the client (no network call) and persist + install it. There is
+	// intentionally no connection probe: it would let any logged-in user make the
+	// server fetch an arbitrary URL (SSRF). A bad URL/key surfaces at the next
+	// PDNS operation instead.
+	client, err := pdns.NewClient(pdnsURL, pdnsKey, nil)
+	if err != nil {
+		data.Error = "PowerDNS API URL rejected: " + err.Error()
+	} else if err := h.saveServerSettings(r.Context(), pdnsURL, pdnsKey); err != nil {
+		log.Printf("settings: failed to save server settings: %v", err)
+		http.Error(w, "failed to save settings", http.StatusInternalServerError)
 		return
-	} else if n == 0 {
-		if _, err := h.client.Settings.Create().SetKey("pdns_api_url").SetValue(pdnsURL).Save(r.Context()); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+	} else {
+		h.setPDNS(client)
+		data.Message = "Settings saved"
 	}
-	if n, err := h.client.Settings.Update().Where(settings.KeyEQ("pdns_api_key")).SetValue(pdnsKey).Save(r.Context()); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	} else if n == 0 {
-		if _, err := h.client.Settings.Create().SetKey("pdns_api_key").SetValue(pdnsKey).Save(r.Context()); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-	config.SetPDNSAPIURL(pdnsURL)
-	config.SetPDNSAPIKey(pdnsKey)
-	data.Message = "Settings saved"
 	if err := tmpl["settings/server.html"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
+
+// saveServerSettings persists the PowerDNS API URL and key atomically so a
+// failure cannot leave one field updated and the other stale.
+func (h *handler) saveServerSettings(ctx context.Context, pdnsURL, pdnsKey string) error {
+	tx, err := h.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	if err := upsertSetting(ctx, tx, "pdns_api_url", pdnsURL); err != nil {
+		return rollback(tx, err)
+	}
+	if err := upsertSetting(ctx, tx, "pdns_api_key", pdnsKey); err != nil {
+		return rollback(tx, err)
+	}
+	return tx.Commit()
+}
+
+// upsertSetting sets key=value within tx, creating the row if absent.
+func upsertSetting(ctx context.Context, tx *ent.Tx, key, value string) error {
+	n, err := tx.Settings.Update().Where(settings.KeyEQ(key)).SetValue(value).Save(ctx)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, err := tx.Settings.Create().SetKey(key).SetValue(value).Save(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// rollback rolls tx back and returns the originating error.
+func rollback(tx *ent.Tx, cause error) error {
+	_ = tx.Rollback()
+	return cause
+}
+
