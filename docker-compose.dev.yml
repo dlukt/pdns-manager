@@ -1,0 +1,68 @@
+# Development infrastructure for pdns-manager.
+#
+# This is NOT the default compose file: it is not docker-compose.yml / compose.yaml,
+# so `docker compose` will not auto-discover it. It is only used through the
+# `make dev-*` targets, which reference it via `-f`.
+#
+# Brings up:
+#   - postgres : the app's database (host port 5432, matches the app's default DSN,
+#                so `go run . start` connects with no flags) AND a dedicated `pdns`
+#                database for PowerDNS.
+#   - powerdns : PowerDNS Authoritative Server (HTTP API on host port 8081), using a
+#                gpgsql backend pointed at the postgres service.
+#
+# The app itself runs on the host (see `make dev-run`) so code changes hot-reload.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: pdns-manager-postgres
+    environment:
+      # Credentials intentionally match the app's default DSN
+      # (postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable).
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Create the `pdns` database and load the PowerDNS schema into it (runs once,
+      # on first init only).
+      - ./docker/dev/init-pdns-db.sh:/docker-entrypoint-initdb.d/10-init-pdns-db.sh:ro
+      # The schema is mounted outside the init dir so postgres does not auto-run it
+      # against the wrong database; the init script loads it explicitly.
+      - ./docker/dev/pdns-schema.pgsql.sql:/schemas/pdns-schema.pgsql.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  powerdns:
+    image: powerdns/pdns-auth-50
+    container_name: pdns-manager-powerdns
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Belt-and-suspenders; the authoritative API config lives in pdns.conf.
+      # startup.py writes /etc/powerdns/pdns.d/_api.conf from this key.
+      PDNS_AUTH_API_KEY: dev-secret-key
+    ports:
+      # HTTP API / webserver - what pdns-manager talks to.
+      - "8081:8081"
+      # Authoritative DNS for manual testing (dig @localhost -p 5300 ...).
+      - "5300:5300/udp"
+      - "5300:5300/tcp"
+    volumes:
+      # Replaces the image default (gsqlite3) with our gpgsql + API config.
+      - ./docker/dev/pdns.conf:/etc/powerdns/pdns.conf:ro
+    # restart: unless-stopped absorbs the first-boot race while postgres finishes
+    # creating the `pdns` database and loading its schema.
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
