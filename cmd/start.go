@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
@@ -31,45 +30,17 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "starts the server",
 	Run: func(cmd *cobra.Command, args []string) {
-		var dsn string
-		if config.DSN == "" {
-			dsn = os.Getenv("DSN")
-		} else {
-			dsn = config.DSN
+		// Config values resolve via Viper (flag > env > default); see package config.
+		dsn := config.DSN()
+		if dsn == "" {
+			log.Fatal("database DSN is required: set the --dsn flag or the DSN environment variable")
 		}
-		var smtpAddr, smtpUser, smtpPass, mailFrom string
-		if config.SMTPAddr == "" {
-			smtpAddr = os.Getenv("SMTP_ADDR")
-		} else {
-			smtpAddr = config.SMTPAddr
-		}
-		if config.SMTPUser == "" {
-			smtpUser = os.Getenv("SMTP_USER")
-		} else {
-			smtpUser = config.SMTPUser
-		}
-		if config.SMTPPass == "" {
-			smtpPass = os.Getenv("SMTP_PASS")
-		} else {
-			smtpPass = config.SMTPPass
-		}
-		if config.MailFrom == "" {
-			mailFrom = os.Getenv("MAIL_FROM")
-		} else {
-			mailFrom = config.MailFrom
-		}
-
-		var pdnsURL, pdnsKey string
-		if config.PDNSAPIURL == "" {
-			pdnsURL = os.Getenv("PDNS_API_URL")
-		} else {
-			pdnsURL = config.PDNSAPIURL
-		}
-		if config.PDNSAPIKey == "" {
-			pdnsKey = os.Getenv("PDNS_API_KEY")
-		} else {
-			pdnsKey = config.PDNSAPIKey
-		}
+		smtpAddr := config.SMTPAddr()
+		smtpUser := config.SMTPUser()
+		smtpPass := config.SMTPPass()
+		mailFrom := config.MailFrom()
+		pdnsURL := config.PDNSAPIURL()
+		pdnsKey := config.PDNSAPIKey()
 
 		client := openDatabaseConnection(dsn)
 		defer client.Close()
@@ -79,6 +50,8 @@ var startCmd = &cobra.Command{
 		}
 		pdnsURL = ensureSetting(ctx, client, "pdns_api_url", pdnsURL)
 		pdnsKey = ensureSetting(ctx, client, "pdns_api_key", pdnsKey)
+		config.SetPDNSAPIURL(pdnsURL)
+		config.SetPDNSAPIKey(pdnsKey)
 		var pdnsClient *pdns.Client
 		if pdnsURL != "" {
 			var err error
@@ -87,15 +60,13 @@ var startCmd = &cobra.Command{
 				log.Fatalf("failed creating PDNS client: %v", err)
 			}
 		}
-		config.PDNSAPIURL = pdnsURL
-		config.PDNSAPIKey = pdnsKey
 		key := make([]byte, 32)
 		if _, err := rand.Read(key); err != nil {
 			log.Fatalf("failed generating session key: %v", err)
 		}
 
 		var mailer auth.Mailer = auth.NewLogMailer()
-		if config.SMTPAddr != "" && config.MailFrom != "" {
+		if smtpAddr != "" && mailFrom != "" {
 			mailer = auth.NewSMTPMailer(smtpAddr, smtpUser, smtpPass, mailFrom)
 		}
 		sessions := session.NewStore(key)
@@ -108,12 +79,20 @@ var startCmd = &cobra.Command{
 }
 
 func init() {
-	startCmd.Flags().StringVar(&config.SMTPAddr, "smtp-addr", "", "SMTP server address host:port")
-	startCmd.Flags().StringVar(&config.SMTPUser, "smtp-user", "", "SMTP username")
-	startCmd.Flags().StringVar(&config.SMTPPass, "smtp-pass", "", "SMTP password")
-	startCmd.Flags().StringVar(&config.MailFrom, "mail-from", "", "From email address")
-	startCmd.Flags().StringVar(&config.PDNSAPIURL, "pdns-api-url", "", "PowerDNS API URL")
-	startCmd.Flags().StringVar(&config.PDNSAPIKey, "pdns-api-key", "", "PowerDNS API Key")
+	startCmd.Flags().String("smtp-addr", "", "SMTP server address host:port")
+	startCmd.Flags().String("smtp-user", "", "SMTP username")
+	startCmd.Flags().String("smtp-pass", "", "SMTP password")
+	startCmd.Flags().String("mail-from", "", "From email address")
+	startCmd.Flags().String("pdns-api-url", "", "PowerDNS API URL")
+	startCmd.Flags().String("pdns-api-key", "", "PowerDNS API Key")
+
+	config.BindFlag(config.KeySMTPAddr, startCmd.Flags().Lookup("smtp-addr"))
+	config.BindFlag(config.KeySMTPUser, startCmd.Flags().Lookup("smtp-user"))
+	config.BindFlag(config.KeySMTPPass, startCmd.Flags().Lookup("smtp-pass"))
+	config.BindFlag(config.KeyMailFrom, startCmd.Flags().Lookup("mail-from"))
+	config.BindFlag(config.KeyPDNSAPIURL, startCmd.Flags().Lookup("pdns-api-url"))
+	config.BindFlag(config.KeyPDNSAPIKey, startCmd.Flags().Lookup("pdns-api-key"))
+
 	rootCmd.AddCommand(startCmd)
 }
 

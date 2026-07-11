@@ -1496,8 +1496,8 @@ func (h *handler) postServerSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	config.PDNSAPIURL = pdnsURL
-	config.PDNSAPIKey = pdnsKey
+	config.SetPDNSAPIURL(pdnsURL)
+	config.SetPDNSAPIKey(pdnsKey)
 	data.Message = "Settings saved"
 	if err := tmpl["settings/server.html"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

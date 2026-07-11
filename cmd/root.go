@@ -35,7 +35,9 @@ func init() {
 
 	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.pdns-manager.yaml)")
 
-	rootCmd.PersistentFlags().StringVar(&config.DSN, "dsn", "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable", "database DSN")
+	// Config resolves via Viper (flag > env > default); see package config.
+	rootCmd.PersistentFlags().String("dsn", config.DefaultDSN, "database DSN")
+	config.BindFlag(config.KeyDSN, rootCmd.PersistentFlags().Lookup("dsn"))
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
