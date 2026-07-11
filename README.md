@@ -1,3 +1,3 @@
-# PDNS Managerr
+# PDNS Manager
 
 status: WIP
