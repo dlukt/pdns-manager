@@ -1,6 +1,6 @@
 -- PowerDNS Authoritative Server - PostgreSQL backend schema.
 -- Sourced from the upstream PowerDNS project:
---   modules/gpgsqlbackend/schema.pgsql.sql  (rel/auth-5.0.x)
+--   modules/gpgsqlbackend/schema.pgsql.sql  (rel/auth-5.1.x)
 -- Loaded into the dedicated `pdns` database by docker/dev/init-pdns-db.sh.
 
 CREATE TABLE domains (
